@@ -24,7 +24,7 @@ public record CrearPlatilloDTO(
 
         String descripcion,
 
-        @NotBlank(message = "La categoria es obligatoria")
+        @NotBlank(message = "La categoría es obligatoria")
         String categoria,
 
         @NotNull(message = "El precio es obligatorio")
