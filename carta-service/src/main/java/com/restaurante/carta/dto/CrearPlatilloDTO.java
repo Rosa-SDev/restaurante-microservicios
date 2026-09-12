@@ -31,7 +31,8 @@ public record CrearPlatilloDTO(
         @DecimalMin(value = "0.0", inclusive = false, message = "El precio debe ser mayor que cero")
         BigDecimal precio,
 
-        boolean disponible) {
+        @NotNull(message = "La disponibilidad es obligatoria")
+        Boolean disponible) {
 
     /** Construye la entidad a partir de lo que mando el cliente. */
     public Platillo aEntidad() {
