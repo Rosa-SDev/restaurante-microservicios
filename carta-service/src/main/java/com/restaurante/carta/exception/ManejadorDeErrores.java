@@ -1,6 +1,7 @@
 package com.restaurante.carta.exception;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -47,5 +48,15 @@ public class ManejadorDeErrores {
         }
         return Map.of("error", "La petición tiene campos inválidos",
                       "campos", campos);
+    }
+
+    /**
+     * El cuerpo no se pudo leer: un JSON roto, una llave sin cerrar o un valor
+     * que no encaja en su tipo. Se responde con el mismo formato que el resto.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, Object> jsonInvalido(HttpMessageNotReadableException excepcion) {
+        return Map.of("error", "El cuerpo de la petición no es un JSON válido.");
     }
 }
