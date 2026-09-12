@@ -1,21 +1,21 @@
 # restaurante-microservicios
 
-Sistema de Gestion de Restaurante expuesto como microservicios REST con Spring Boot.
-El proyecto es un repositorio Maven multi-modulo: un `pom.xml` padre que coordina
+Sistema de Gestión de Restaurante expuesto como microservicios REST con Spring Boot.
+El proyecto es un repositorio Maven multi-módulo: un `pom.xml` padre que coordina
 cinco aplicaciones Spring Boot independientes, cada una con su propio `main`, su
 propio puerto y su propia base de datos.
 
-## Modulos
+## Módulos
 
-| Modulo | Puerto | Base de datos | Dominio |
+| Módulo | Puerto | Base de datos | Dominio |
 |---|---|---|---|
 | `api-gateway` | 8080 | — | Enruta las peticiones hacia los cuatro servicios |
-| `usuarios-service` | 8081 | `usuariosdb` | Usuario, roles y autenticacion |
+| `usuarios-service` | 8081 | `usuariosdb` | Usuario, roles y autenticación |
 | `carta-service` | 8082 | `cartadb` | Platillo |
 | `clientes-service` | 8083 | `clientesdb` | Cliente, Reserva |
 | `salon-service` | 8084 | `salondb` | Mesa, Pedido, Factura |
 
-El cliente HTTP solo necesita conocer `http://localhost:8080`: el gateway reenvia
+El cliente HTTP solo necesita conocer `http://localhost:8080`: el gateway reenvía
 cada ruta al servicio que le corresponde.
 
 | Prefijo de ruta | Servicio |
@@ -35,7 +35,7 @@ Cada servicio fija su puerto y su base de datos en su propio
 
 ## Compilar
 
-Desde la raiz, para los cinco modulos a la vez:
+Desde la raíz, para los cinco módulos a la vez:
 
 ```bash
 ./mvnw clean install
@@ -55,7 +55,7 @@ Cada servicio se ejecuta por separado, en su propia terminal:
 ./mvnw spring-boot:run -pl carta-service
 ```
 
-Sustituye `carta-service` por el modulo que quieras arrancar. Para probar el
+Sustituye `carta-service` por el módulo que quieras arrancar. Para probar el
 sistema completo hay que levantar los cinco.
 
 ## Estructura de un servicio
