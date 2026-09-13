@@ -41,9 +41,10 @@ public class ReservaService {
     public ReservaDTO crear(CrearReservaDTO datos) {
         Cliente cliente = clienteRepository.findById(datos.clienteId())
                 .orElseThrow(() -> new NoEncontradoException(
-                    "No existe un cliente con id " + datos.clienteId() + "."));
+                        "No existe un cliente con id " + datos.clienteId() + "."));
 
-        // Se compara por minutos: el formulario original solo maneja "dd/MM/yyyy HH:mm",
+        // Se compara por minutos: el formulario original solo maneja "dd/MM/yyyy
+        // HH:mm",
         // así que comparar por segundos rechazaría reservas válidas por medio minuto.
         if (datos.fechaHora().truncatedTo(ChronoUnit.MINUTES)
                 .isBefore(LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES))) {
@@ -57,33 +58,37 @@ public class ReservaService {
                 datos.mesaId(), datos.meseroId());
         return ReservaDTO.de(reservaRepository.save(reserva));
     }
-    
+
     public ReservaDTO cambiarEstado(Long id, EstadoReserva nuevoEstado) {
-    Reserva reserva = buscarEntidad(id);
-    EstadoReserva actual = reserva.getEstado();
+        Reserva reserva = buscarEntidad(id);
+        EstadoReserva actual = reserva.getEstado();
 
-    boolean transicionValida = switch (nuevoEstado) {
-        case CONFIRMADA -> actual == EstadoReserva.PENDIENTE;
-        case CANCELADA -> actual == EstadoReserva.PENDIENTE || actual == EstadoReserva.CONFIRMADA;
-        case CUMPLIDA -> actual == EstadoReserva.CONFIRMADA;
-        case PENDIENTE -> false;
-    };
+        boolean transicionValida = switch (nuevoEstado) {
+            case CONFIRMADA -> actual == EstadoReserva.PENDIENTE;
+            case CANCELADA -> actual == EstadoReserva.PENDIENTE || actual == EstadoReserva.CONFIRMADA;
+            case CUMPLIDA -> actual == EstadoReserva.CONFIRMADA;
+            case PENDIENTE -> false;
+        };
 
-    if (!transicionValida) {
-        throw new ConflictoException(
-            "No se puede pasar una reserva de " + actual + " a " + nuevoEstado + ".");
+        if (!transicionValida) {
+            throw new ConflictoException(
+                    "No se puede pasar una reserva de " + actual + " a " + nuevoEstado + ".");
+        }
+
+        if (nuevoEstado == EstadoReserva.CONFIRMADA) {
+            reserva.confirmar();
+        } else if (nuevoEstado == EstadoReserva.CANCELADA) {
+            reserva.cancelar();
+        } else {
+            reserva.setEstado(nuevoEstado);
+        }
+
+        return ReservaDTO.de(reservaRepository.save(reserva));
     }
 
-    if (nuevoEstado == EstadoReserva.CONFIRMADA) {
-        reserva.confirmar();
-    } else if (nuevoEstado == EstadoReserva.CANCELADA) {
-        reserva.cancelar();
-    } else {
-        reserva.setEstado(nuevoEstado);
+    public void eliminar(Long id) {
+        reservaRepository.delete(buscarEntidad(id));
     }
-
-    return ReservaDTO.de(reservaRepository.save(reserva));
-}
 
     private Reserva buscarEntidad(Long id) {
         return reservaRepository.findById(id)
