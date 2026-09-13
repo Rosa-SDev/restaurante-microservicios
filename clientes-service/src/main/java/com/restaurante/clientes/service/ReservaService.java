@@ -14,6 +14,7 @@ import com.restaurante.clientes.model.EstadoReserva;
 import com.restaurante.clientes.model.Reserva;
 import com.restaurante.clientes.repository.ClienteRepository;
 import com.restaurante.clientes.repository.ReservaRepository;
+import com.restaurante.clientes.exception.ConflictoException;
 
 @Service
 public class ReservaService {
@@ -56,6 +57,33 @@ public class ReservaService {
                 datos.mesaId(), datos.meseroId());
         return ReservaDTO.de(reservaRepository.save(reserva));
     }
+    
+    public ReservaDTO cambiarEstado(Long id, EstadoReserva nuevoEstado) {
+    Reserva reserva = buscarEntidad(id);
+    EstadoReserva actual = reserva.getEstado();
+
+    boolean transicionValida = switch (nuevoEstado) {
+        case CONFIRMADA -> actual == EstadoReserva.PENDIENTE;
+        case CANCELADA -> actual == EstadoReserva.PENDIENTE || actual == EstadoReserva.CONFIRMADA;
+        case CUMPLIDA -> actual == EstadoReserva.CONFIRMADA;
+        case PENDIENTE -> false;
+    };
+
+    if (!transicionValida) {
+        throw new ConflictoException(
+            "No se puede pasar una reserva de " + actual + " a " + nuevoEstado + ".");
+    }
+
+    if (nuevoEstado == EstadoReserva.CONFIRMADA) {
+        reserva.confirmar();
+    } else if (nuevoEstado == EstadoReserva.CANCELADA) {
+        reserva.cancelar();
+    } else {
+        reserva.setEstado(nuevoEstado);
+    }
+
+    return ReservaDTO.de(reservaRepository.save(reserva));
+}
 
     private Reserva buscarEntidad(Long id) {
         return reservaRepository.findById(id)
