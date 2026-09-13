@@ -1,7 +1,8 @@
 package com.restaurante.usuarios.dto;
 
 import com.restaurante.usuarios.model.Rol;
-import jakarta.validation.constraints.Email;
+import com.restaurante.usuarios.validation.CorreoValido;
+//import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -13,7 +14,8 @@ public record CrearUsuarioDTO(
         String nombre,
 
         @NotBlank(message = "El correo es obligatorio")
-        @Email(message = "El correo no tiene un formato válido")
+        //@Email(message = "El correo no tiene un formato válido")
+        @CorreoValido
         String correo,
 
         @NotNull(message = "El rol es obligatorio")
