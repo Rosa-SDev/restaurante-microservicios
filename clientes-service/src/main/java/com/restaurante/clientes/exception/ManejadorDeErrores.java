@@ -35,9 +35,13 @@ public class ManejadorDeErrores {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String, String> validacionFallida(MethodArgumentNotValidException e) {
         Map<String, String> errores = new HashMap<>();
-        e.getBindingResult().getFieldErrors().forEach(err ->
-            errores.put(err.getField(), err.getDefaultMessage())
-        );
+        e.getBindingResult().getFieldErrors().forEach(err -> errores.put(err.getField(), err.getDefaultMessage()));
         return errores;
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, String> solicitudInvalida(IllegalArgumentException e) {
+        return Map.of("error", e.getMessage());
     }
 }
