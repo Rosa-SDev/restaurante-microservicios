@@ -1,32 +1,10 @@
 package com.restaurante.clientes.dto;
 
-public class ClienteDTO {
+import com.restaurante.clientes.model.Cliente;
 
-    private Long id;
-    private String nombre;
-    private String documento;
-    private String telefono;
+public record ClienteDTO(Long id, String nombre, String documento, String telefono) {
 
-    public ClienteDTO(Long id, String nombre, String documento, String telefono) {
-        this.id = id;
-        this.nombre = nombre;
-        this.documento = documento;
-        this.telefono = telefono;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public String getNombre() {
-        return nombre;
-    }
-
-    public String getDocumento() {
-        return documento;
-    }
-
-    public String getTelefono() {
-        return telefono;
+    public static ClienteDTO de(Cliente c) {
+        return new ClienteDTO(c.getId(), c.getNombre(), c.getDocumento(), c.getTelefono());
     }
 }

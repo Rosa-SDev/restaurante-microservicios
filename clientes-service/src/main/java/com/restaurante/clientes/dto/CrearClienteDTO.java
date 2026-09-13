@@ -2,37 +2,12 @@ package com.restaurante.clientes.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
-public class CrearClienteDTO {
+public record CrearClienteDTO(
+    @NotBlank(message = "El nombre es obligatorio")
+    String nombre,
 
-    @NotBlank
-    private String nombre;
+    @NotBlank(message = "El documento es obligatorio")
+    String documento,
 
-    @NotBlank
-    private String documento;
-
-    private String telefono;
-
-    public String getNombre() {
-        return nombre;
-    }
-
-    public void setNombre(String nombre) {
-        this.nombre = nombre;
-    }
-
-    public String getDocumento() {
-        return documento;
-    }
-
-    public void setDocumento(String documento) {
-        this.documento = documento;
-    }
-
-    public String getTelefono() {
-        return telefono;
-    }
-
-    public void setTelefono(String telefono) {
-        this.telefono = telefono;
-    }
-}
+    String telefono
+) { }
