@@ -7,28 +7,27 @@ import com.restaurante.usuarios.exception.CredencialesInvalidasException;
 import com.restaurante.usuarios.exception.NoEncontradoException;
 import com.restaurante.usuarios.model.*;
 import com.restaurante.usuarios.repository.UsuarioRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.List;
 
 @Service
 public class UsuarioService {
 
     private final UsuarioRepository repositorio;
+    private final PasswordEncoder passwordEncoder;
 
-    public UsuarioService(UsuarioRepository repositorio) {
+    public UsuarioService(UsuarioRepository repositorio, PasswordEncoder passwordEncoder) {
         this.repositorio = repositorio;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public UsuarioDTO crear(CrearUsuarioDTO dto) {
         if (repositorio.existsByCorreoIgnoreCase(dto.correo())) {
             throw new ConflictoException("Ya existe un usuario con ese correo.");
         }
-        Usuario usuario = construirPorRol(dto.rol(), dto.nombre(), dto.correo(), hash(dto.password()));
+        Usuario usuario = construirPorRol(dto.rol(), dto.nombre(), dto.correo(), passwordEncoder.encode(dto.password()));
         return UsuarioDTO.de(repositorio.save(usuario));
     }
 
@@ -59,7 +58,7 @@ public class UsuarioService {
 
         usuario.setNombre(dto.nombre());
         usuario.setCorreo(dto.correo());
-        usuario.setPasswordHash(hash(dto.password()));
+        usuario.setPasswordHash(passwordEncoder.encode(dto.password()));
         return UsuarioDTO.de(repositorio.save(usuario));
     }
 
@@ -78,7 +77,7 @@ public class UsuarioService {
         Usuario usuario = repositorio.findByCorreoIgnoreCase(correo)
                 .orElseThrow(() -> new CredencialesInvalidasException("Correo o contraseña incorrectos."));
 
-        if (!usuario.isActivo() || !usuario.getPasswordHash().equals(hash(password))) {
+        if (!usuario.isActivo() || !passwordEncoder.matches(password, usuario.getPasswordHash())) {
             throw new CredencialesInvalidasException("Correo o contraseña incorrectos.");
         }
         return UsuarioDTO.de(usuario);
@@ -96,20 +95,5 @@ public class UsuarioService {
             case COCINERO -> new Cocinero(nombre, correo, passwordHash);
             case CAJERO -> new Cajero(nombre, correo, passwordHash);
         };
-    }
-
-    /**
-     * SHA-256 en hexadecimal. Sin salt: es un prototipo academico y asi se
-     * declara. Copiado tal cual de ControllerUsuario.java.
-     */
-    public static String hash(String texto) {
-        String entrada = (texto == null) ? "" : texto;
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] resumen = md.digest(entrada.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(resumen);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 no disponible en esta JVM", e);
-        }
     }
 }
