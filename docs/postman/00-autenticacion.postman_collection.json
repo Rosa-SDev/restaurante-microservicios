@@ -1,0 +1,277 @@
+{
+  "info": {
+    "name": "Restaurante · autenticación",
+    "description": "Inicio de sesión de los cuatro roles de demostración. Ejecútala primero, en orden, con el environment “Restaurante” seleccionado: cada login guarda su token en ese environment y así las demás colecciones del proyecto lo usan sin copiarlo a mano. Sin environment, los tokens quedan solo en las variables de esta colección. La variable base apunta al api-gateway: http://localhost:8080 con Docker Compose, o http://localhost:30080 si el despliegue es en Kubernetes. El login del administrador llena token y tokenAdministrador; el del mesero, tokenMesero; el del cocinero, tokenCocinero; y el del cajero, tokenCajero. Las demás colecciones usan {{token}}, que corresponde al administrador.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "tokenAdministrador",
+      "value": ""
+    },
+    {
+      "key": "tokenMesero",
+      "value": ""
+    },
+    {
+      "key": "tokenCocinero",
+      "value": ""
+    },
+    {
+      "key": "tokenCajero",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Login · administrador",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 con token Bearer y rol ADMINISTRADOR\", () => {",
+              "    pm.response.to.have.status(200);",
+              "    const j = pm.response.json();",
+              "    pm.expect(j.token).to.be.a(\"string\").and.not.empty;",
+              "    pm.expect(j.tipo).to.eql(\"Bearer\");",
+              "    pm.expect(j.expiraEn).to.eql(3600);",
+              "    pm.expect(j.usuario.rol).to.eql(\"ADMINISTRADOR\");",
+              "});",
+              "pm.test(\"El hash nunca sale en la respuesta\", () => {",
+              "    pm.expect(pm.response.text()).to.not.include(\"passwordHash\");",
+              "});",
+              "const token = pm.response.json().token;",
+              "pm.collectionVariables.set(\"token\", token);",
+              "if (pm.environment.name) { pm.environment.set(\"token\", token); }",
+              "pm.collectionVariables.set(\"tokenAdministrador\", token);",
+              "if (pm.environment.name) { pm.environment.set(\"tokenAdministrador\", token); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ],
+          "raw": "{{base}}/api/auth/login"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"correo\": \"administrador@restaurante.com\",\n  \"password\": \"admin123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "Guarda el token del administrador en {{token}} y en {{tokenAdministrador}}."
+      }
+    },
+    {
+      "name": "Login · mesero",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 con token Bearer y rol MESERO\", () => {",
+              "    pm.response.to.have.status(200);",
+              "    const j = pm.response.json();",
+              "    pm.expect(j.token).to.be.a(\"string\").and.not.empty;",
+              "    pm.expect(j.tipo).to.eql(\"Bearer\");",
+              "    pm.expect(j.expiraEn).to.eql(3600);",
+              "    pm.expect(j.usuario.rol).to.eql(\"MESERO\");",
+              "});",
+              "pm.test(\"El hash nunca sale en la respuesta\", () => {",
+              "    pm.expect(pm.response.text()).to.not.include(\"passwordHash\");",
+              "});",
+              "const token = pm.response.json().token;",
+              "pm.collectionVariables.set(\"tokenMesero\", token);",
+              "if (pm.environment.name) { pm.environment.set(\"tokenMesero\", token); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ],
+          "raw": "{{base}}/api/auth/login"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"correo\": \"mesero@restaurante.com\",\n  \"password\": \"mesero123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "Guarda el token del mesero en {{tokenMesero}}, sin pisar el del administrador."
+      }
+    },
+    {
+      "name": "Login · cocinero",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 con token Bearer y rol COCINERO\", () => {",
+              "    pm.response.to.have.status(200);",
+              "    const j = pm.response.json();",
+              "    pm.expect(j.token).to.be.a(\"string\").and.not.empty;",
+              "    pm.expect(j.tipo).to.eql(\"Bearer\");",
+              "    pm.expect(j.expiraEn).to.eql(3600);",
+              "    pm.expect(j.usuario.rol).to.eql(\"COCINERO\");",
+              "});",
+              "pm.test(\"El hash nunca sale en la respuesta\", () => {",
+              "    pm.expect(pm.response.text()).to.not.include(\"passwordHash\");",
+              "});",
+              "const token = pm.response.json().token;",
+              "pm.collectionVariables.set(\"tokenCocinero\", token);",
+              "if (pm.environment.name) { pm.environment.set(\"tokenCocinero\", token); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ],
+          "raw": "{{base}}/api/auth/login"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"correo\": \"cocinero@restaurante.com\",\n  \"password\": \"cocinero123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "Guarda el token del cocinero en {{tokenCocinero}}, sin pisar el del administrador."
+      }
+    },
+    {
+      "name": "Login · cajero",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 con token Bearer y rol CAJERO\", () => {",
+              "    pm.response.to.have.status(200);",
+              "    const j = pm.response.json();",
+              "    pm.expect(j.token).to.be.a(\"string\").and.not.empty;",
+              "    pm.expect(j.tipo).to.eql(\"Bearer\");",
+              "    pm.expect(j.expiraEn).to.eql(3600);",
+              "    pm.expect(j.usuario.rol).to.eql(\"CAJERO\");",
+              "});",
+              "pm.test(\"El hash nunca sale en la respuesta\", () => {",
+              "    pm.expect(pm.response.text()).to.not.include(\"passwordHash\");",
+              "});",
+              "const token = pm.response.json().token;",
+              "pm.collectionVariables.set(\"tokenCajero\", token);",
+              "if (pm.environment.name) { pm.environment.set(\"tokenCajero\", token); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "auth",
+            "login"
+          ],
+          "raw": "{{base}}/api/auth/login"
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"correo\": \"cajero@restaurante.com\",\n  \"password\": \"cajero123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "Guarda el token del cajero en {{tokenCajero}}, sin pisar el del administrador."
+      }
+    }
+  ]
+}
