@@ -1,0 +1,112 @@
+name: restaurante
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      USUARIOS_DB_PASSWORD: ${USUARIOS_DB_PASSWORD}
+      CARTA_DB_PASSWORD: ${CARTA_DB_PASSWORD}
+      CLIENTES_DB_PASSWORD: ${CLIENTES_DB_PASSWORD}
+      SALON_DB_PASSWORD: ${SALON_DB_PASSWORD}
+      TZ: America/Bogota
+    volumes:
+      - mysql-datos:/var/lib/mysql
+      - ./docker/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  usuarios-service:
+    build:
+      context: .
+      dockerfile: usuarios-service/Dockerfile
+    image: restaurante/usuarios-service:1.0
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      TZ: America/Bogota
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+      DB_URL: jdbc:mysql://mysql:3306/usuariosdb?useSSL=false&allowPublicKeyRetrieval=true
+      DB_USER: usuarios
+      DB_PASSWORD: ${USUARIOS_DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    mem_limit: 512m
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  carta-service:
+    build:
+      context: .
+      dockerfile: carta-service/Dockerfile
+    image: restaurante/carta-service:1.0
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      TZ: America/Bogota
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+      DB_URL: jdbc:mysql://mysql:3306/cartadb?useSSL=false&allowPublicKeyRetrieval=true
+      DB_USER: carta
+      DB_PASSWORD: ${CARTA_DB_PASSWORD}
+    mem_limit: 512m
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  clientes-service:
+    build:
+      context: .
+      dockerfile: clientes-service/Dockerfile
+    image: restaurante/clientes-service:1.0
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      TZ: America/Bogota
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+      DB_URL: jdbc:mysql://mysql:3306/clientesdb?useSSL=false&allowPublicKeyRetrieval=true
+      DB_USER: clientes
+      DB_PASSWORD: ${CLIENTES_DB_PASSWORD}
+    mem_limit: 512m
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  salon-service:
+    build:
+      context: .
+      dockerfile: salon-service/Dockerfile
+    image: restaurante/salon-service:1.0
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      TZ: America/Bogota
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+      DB_URL: jdbc:mysql://mysql:3306/salondb?useSSL=false&allowPublicKeyRetrieval=true
+      DB_USER: salon
+      DB_PASSWORD: ${SALON_DB_PASSWORD}
+    mem_limit: 512m
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    image: restaurante/api-gateway:1.0
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      TZ: America/Bogota
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "8080:8080"
+    mem_limit: 384m
+    depends_on:
+      - usuarios-service
+      - carta-service
+      - clientes-service
+      - salon-service
+
+volumes:
+  mysql-datos:
