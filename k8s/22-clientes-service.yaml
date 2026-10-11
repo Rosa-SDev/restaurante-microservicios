@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clientes-service
+  namespace: restaurante
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clientes-service
+  template:
+    metadata:
+      labels:
+        app: clientes-service
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: clientes-service
+          image: restaurante/clientes-service:1.0
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8083
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: docker
+            - name: TZ
+              value: America/Bogota
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:MaxRAMPercentage=75
+            - name: DB_URL
+              value: jdbc:mysql://mysql:3306/clientesdb?useSSL=false&allowPublicKeyRetrieval=true
+            - name: DB_USER
+              value: clientes
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: restaurante-secretos
+                  key: CLIENTES_DB_PASSWORD
+          resources:
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            tcpSocket:
+              port: 8083
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clientes-service
+  namespace: restaurante
+spec:
+  type: ClusterIP
+  selector:
+    app: clientes-service
+  ports:
+    - port: 8083
+      targetPort: 8083
