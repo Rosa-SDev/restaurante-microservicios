@@ -1,0 +1,24 @@
+name: restaurante
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      USUARIOS_DB_PASSWORD: ${USUARIOS_DB_PASSWORD}
+      CARTA_DB_PASSWORD: ${CARTA_DB_PASSWORD}
+      CLIENTES_DB_PASSWORD: ${CLIENTES_DB_PASSWORD}
+      SALON_DB_PASSWORD: ${SALON_DB_PASSWORD}
+      TZ: America/Bogota
+    volumes:
+      - mysql-datos:/var/lib/mysql
+      - ./docker/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  mysql-datos:
