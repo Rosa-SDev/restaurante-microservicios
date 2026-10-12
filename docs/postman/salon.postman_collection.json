@@ -1,0 +1,245 @@
+{
+    "info": {
+        "name": "salon-service",
+        "description": "Colección de pruebas para salon-service con autenticación JWT y persistencia",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{token}}",
+                "type": "string"
+            }
+        ]
+    },
+    "item": [
+        {
+            "name": "Mesas",
+            "item": [
+                {
+                    "name": "Crear mesa",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"numero\": 10,\n  \"capacidad\": 4\n}"
+                        },
+                        "url": "{{base}}/api/mesas"
+                    }
+                },
+                {
+                    "name": "Listar mesas",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{base}}/api/mesas"
+                    }
+                },
+                {
+                    "name": "Listar mesas libres",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{base}}/api/mesas?estado=LIBRE"
+                    }
+                },
+                {
+                    "name": "Consultar mesa por ID",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{base}}/api/mesas/1"
+                    }
+                },
+                {
+                    "name": "Actualizar mesa",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"numero\": 10,\n  \"capacidad\": 6\n}"
+                        },
+                        "url": "{{base}}/api/mesas/1"
+                    }
+                },
+                {
+                    "name": "Eliminar mesa",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{base}}/api/mesas/1"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Pedidos",
+            "item": [
+                {
+                    "name": "Abrir pedido",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"mesaId\": 1,\n  \"meseroId\": 2,\n  \"cocineroId\": 3,\n  \"clienteId\": 1,\n  \"observaciones\": \"Sin cebolla\"\n}"
+                        },
+                        "url": "{{base}}/api/pedidos"
+                    }
+                },
+                {
+                    "name": "Listar pedidos",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{base}}/api/pedidos"
+                    }
+                },
+                {
+                    "name": "Consultar pedido por ID",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{base}}/api/pedidos/1"
+                    }
+                },
+                {
+                    "name": "Agregar platillo al pedido",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"platilloId\": 1,\n  \"nombre\": \"Bandeja Paisa\",\n  \"precioUnitario\": 38000.00\n}"
+                        },
+                        "url": "{{base}}/api/pedidos/1/platillos"
+                    }
+                },
+                {
+                    "name": "Cambiar estado del pedido",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"estado\": \"EN_PREPARACION\"\n}"
+                        },
+                        "url": "{{base}}/api/pedidos/1/estado"
+                    }
+                },
+                {
+                    "name": "Retirar platillo del pedido",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{base}}/api/pedidos/1/platillos/1"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Facturas",
+            "item": [
+                {
+                    "name": "Emitir factura",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"pedidoId\": 1,\n  \"cajeroId\": 4,\n  \"metodoPago\": \"EFECTIVO\",\n  \"montoPagado\": 50000.00\n}"
+                        },
+                        "url": "{{base}}/api/facturas"
+                    }
+                },
+                {
+                    "name": "Listar facturas",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{base}}/api/facturas"
+                    }
+                },
+                {
+                    "name": "Consultar factura por ID",
+                    "request": {
+                        "method": "GET",
+                        "url": "{{base}}/api/facturas/1"
+                    }
+                },
+                {
+                    "name": "Anular factura",
+                    "request": {
+                        "method": "DELETE",
+                        "url": "{{base}}/api/facturas/1"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Reglas de Negocio (Errores 409)",
+            "item": [
+                {
+                    "name": "Error - Mesa ocupada (409 Conflict)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"mesaId\": 1,\n  \"meseroId\": 2,\n  \"cocineroId\": 3,\n  \"clienteId\": 2\n}"
+                        },
+                        "url": "{{base}}/api/pedidos"
+                    }
+                },
+                {
+                    "name": "Error - Pago insuficiente (409 Conflict)",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"pedidoId\": 1,\n  \"cajeroId\": 4,\n  \"metodoPago\": \"EFECTIVO\",\n  \"montoPagado\": 5000.00\n}"
+                        },
+                        "url": "{{base}}/api/facturas"
+                    }
+                }
+            ]
+        }
+    ]
+}
