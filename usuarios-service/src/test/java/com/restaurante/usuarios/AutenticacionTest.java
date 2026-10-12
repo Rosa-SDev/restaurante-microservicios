@@ -29,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Pruebas del login con token: respuesta del contrato, token verificable con la clave compartida,
+ * Pruebas del login con token: forma de la respuesta, token verificable con la clave compartida,
  * rechazo de claves incorrectas y contraseñas guardadas con BCrypt.
  */
 @SpringBootTest
@@ -77,7 +77,7 @@ class AutenticacionTest {
     }
 
     @Test
-    void elTokenSeVerificaConLaClaveCompartidaYLlevaLosClaimsDelContrato() throws Exception {
+    void elTokenSeVerificaConLaClaveCompartidaYLlevaLosClaimsEsperados() throws Exception {
         String respuesta = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(cuerpoLogin(CORREO_ADMIN, "admin123")))
