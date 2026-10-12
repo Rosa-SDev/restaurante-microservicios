@@ -21,7 +21,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Prueba de integración del flujo completo del salón según el Paso 9 de TAREAS-CAMILO.md:
+ * Prueba de integración del flujo completo del salón:
  * 1. POST /api/mesas → crea una mesa LIBRE (201).
  * 2. POST /api/pedidos → abre pedido sobre esa mesa (201) y la mesa queda OCUPADA.
  * 3. POST /api/pedidos/{id}/platillos dos veces → dos líneas agregadas.
