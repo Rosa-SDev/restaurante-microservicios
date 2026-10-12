@@ -1,0 +1,689 @@
+{
+  "info": {
+    "name": "Restaurante · carta-service",
+    "description": "Los seis endpoints de la carta, los errores 400, 404 y 409, y las dos reglas del gateway que afectan a los platillos. Ejecútala con el Collection Runner, en orden, y después de 00-autenticacion con el environment “Restaurante” seleccionado: de ahí salen {{token}}, que es el del administrador, y {{tokenMesero}}, que esta colección no genera. La variable base apunta al api-gateway: http://localhost:8080 con Docker Compose, o http://localhost:30080 si el despliegue es en Kubernetes. Se puede correr varias veces: el platillo de prueba lleva un nombre distinto en cada ejecución y la última carpeta lo borra.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "platilloId",
+      "value": ""
+    },
+    {
+      "key": "nombrePlatillo",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1 · CRUD de platillos",
+      "item": [
+        {
+          "name": "POST · crear platillo (201)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Nombre distinto en cada ejecución, para no chocar con el 409 de nombre repetido.",
+                  "pm.collectionVariables.set(\"nombrePlatillo\", \"Sancocho de prueba \" + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 201\", () => {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Devuelve el nombre que se envió\", () => {",
+                  "    pm.expect(pm.response.json().nombre).to.eql(pm.collectionVariables.get(\"nombrePlatillo\"));",
+                  "});",
+                  "pm.collectionVariables.set(\"platilloId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/platillos",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"{{nombrePlatillo}}\",\n  \"descripcion\": \"Sopa de prueba con papa, yuca y plátano\",\n  \"categoria\": \"Sopas\",\n  \"precio\": 26000.00,\n  \"disponible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Guarda el id en {{platilloId}}."
+          }
+        },
+        {
+          "name": "GET · listar platillos (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Devuelve una lista con al menos cinco platillos\", () => {",
+                  "    const lista = pm.response.json();",
+                  "    pm.expect(lista).to.be.an(\"array\");",
+                  "    pm.expect(lista.length).to.be.at.least(5);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/platillos",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos"
+              ]
+            },
+            "description": "Los cinco de demostración más el de prueba."
+          }
+        },
+        {
+          "name": "GET · filtrar por categoría (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Todos son de la categoría Sopas\", () => {",
+                  "    const lista = pm.response.json();",
+                  "    pm.expect(lista).to.be.an(\"array\").that.is.not.empty;",
+                  "    lista.forEach(p => pm.expect(p.categoria).to.eql(\"Sopas\"));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/platillos?categoria=Sopas",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos"
+              ],
+              "query": [
+                {
+                  "key": "categoria",
+                  "value": "Sopas"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET · filtrar por disponibilidad (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Todos están disponibles\", () => {",
+                  "    const lista = pm.response.json();",
+                  "    pm.expect(lista).to.be.an(\"array\").that.is.not.empty;",
+                  "    lista.forEach(p => pm.expect(p.disponible).to.be.true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/platillos?disponible=true",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos"
+              ],
+              "query": [
+                {
+                  "key": "disponible",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "La «Limonada de coco» de demostración no está disponible, así que el filtro sí descarta algo."
+          }
+        },
+        {
+          "name": "GET · consultar por id (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Es el platillo creado\", () => {",
+                  "    pm.expect(String(pm.response.json().id)).to.eql(String(pm.collectionVariables.get(\"platilloId\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/platillos/{{platilloId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos",
+                "{{platilloId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT · actualizar platillo (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"El precio devuelto es el nuevo\", () => {",
+                  "    pm.expect(Number(pm.response.json().precio)).to.eql(30000);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/platillos/{{platilloId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos",
+                "{{platilloId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"{{nombrePlatillo}}\",\n  \"descripcion\": \"Sopa de prueba, ahora con mazorca\",\n  \"categoria\": \"Sopas\",\n  \"precio\": 30000.00,\n  \"disponible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "El cuerpo va completo porque el PUT reemplaza todos los campos. El nombre se reenvía sin cambios: el servicio solo busca duplicados cuando el nombre cambia."
+          }
+        },
+        {
+          "name": "PUT · aplicar descuento (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"El precio queda por debajo del anterior\", () => {",
+                  "    const precio = Number(pm.response.json().precio);",
+                  "    pm.expect(precio).to.be.below(30000);",
+                  "    pm.expect(precio).to.eql(27000);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/platillos/{{platilloId}}/descuento",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos",
+                "{{platilloId}}",
+                "descuento"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"porcentaje\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "El 10 % sobre 30000.00 deja el precio en 27000.00."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 · Errores 400, 404 y 409",
+      "item": [
+        {
+          "name": "POST platillo · cuerpo inválido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 400\", () => {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Trae la propiedad error\", () => {",
+                  "    pm.expect(pm.response.json()).to.have.property(\"error\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/platillos",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"descripcion\": \"Sin nombre y con precio cero\",\n  \"categoria\": \"Sopas\",\n  \"precio\": 0,\n  \"disponible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "El nombre vacío y el precio cero los rechaza la validación del cuerpo."
+          }
+        },
+        {
+          "name": "PUT descuento · porcentaje inválido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 400\", () => {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Trae la propiedad error\", () => {",
+                  "    pm.expect(pm.response.json()).to.have.property(\"error\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/platillos/{{platilloId}}/descuento",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos",
+                "{{platilloId}}",
+                "descuento"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"porcentaje\": 150\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "El porcentaje no puede pasar de cien."
+          }
+        },
+        {
+          "name": "GET platillo · inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 404\", () => {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/platillos/999999",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos",
+                "999999"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST platillo · nombre repetido (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 409\", () => {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test(\"Mensaje de error\", () => {",
+                  "    pm.expect(pm.response.json().error).to.include(\"Ya existe un platillo\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/platillos",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Bandeja paisa\",\n  \"descripcion\": \"Intento de duplicado\",\n  \"categoria\": \"Fuertes\",\n  \"precio\": 38000.00,\n  \"disponible\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "«Bandeja paisa» viene en los datos de demostración, y el nombre no distingue mayúsculas."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 · Seguridad del gateway (401 y 403)",
+      "item": [
+        {
+          "name": "GET platillos · sin token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 401\", () => {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test(\"Mensaje del gateway\", () => {",
+                  "    pm.expect(pm.response.json().error).to.eql(\"Debe iniciar sesión con un token válido.\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/platillos",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Solo da 401 a través del gateway (:8080). Directo a :8082 responde 200."
+          }
+        },
+        {
+          "name": "DELETE platillo · con mesero (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 403\", () => {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test(\"Mensaje del gateway\", () => {",
+                  "    pm.expect(pm.response.json().error).to.eql(\"No tiene permisos para realizar esta operación.\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/platillos/{{platilloId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos",
+                "{{platilloId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenMesero}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Borrar platillos es solo del ADMINISTRADOR. El gateway detiene la petición, así que el platillo sigue ahí para la carpeta siguiente."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 · Limpieza",
+      "item": [
+        {
+          "name": "DELETE · eliminar platillo (204)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 204\", () => {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/platillos/{{platilloId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos",
+                "{{platilloId}}"
+              ]
+            },
+            "description": "Con el token de la colección, que es el del administrador."
+          }
+        },
+        {
+          "name": "GET · platillo eliminado (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 404\", () => {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/platillos/{{platilloId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "platillos",
+                "{{platilloId}}"
+              ]
+            },
+            "description": "Confirma el borrado y deja la carta como estaba."
+          }
+        }
+      ]
+    }
+  ]
+}
