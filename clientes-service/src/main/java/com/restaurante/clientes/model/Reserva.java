@@ -22,7 +22,7 @@ import jakarta.persistence.Table;
  * Por lo mismo, confirmar()/cancelar() aquí solo cambian el estado propio de
  * la reserva — el original también tocaba el estado de la Mesa, pero eso ya
  * no es posible sin el objeto real. Validar mesa/capacidad queda fuera del
- * Avance 1 (decisión D8 del contrato).
+ * alcance del Avance 1.
  */
 @Entity
 @Table(name = "reservas")

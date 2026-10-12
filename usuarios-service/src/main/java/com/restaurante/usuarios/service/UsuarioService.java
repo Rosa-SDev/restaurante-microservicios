@@ -45,7 +45,7 @@ public class UsuarioService {
     /**
      * Actualiza nombre, correo y contraseña. El rol no se puede cambiar por
      * esta vía: en SINGLE_TABLE cambiar de subclase implicaría borrar y
-     * recrear la fila, y el contrato no pide esa operación.
+     * recrear la fila, y esa operación no se requiere.
      */
     public UsuarioDTO actualizar(Long id, CrearUsuarioDTO dto) {
         Usuario usuario = buscarEntidad(id);
