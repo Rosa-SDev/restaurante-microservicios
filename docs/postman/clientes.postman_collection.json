@@ -980,7 +980,7 @@
                 }
               ]
             },
-            "description": "Los DELETE de reservas y clientes son solo del ADMINISTRADOR (§6.3)."
+            "description": "Los DELETE de reservas y clientes son solo del ADMINISTRADOR (ver «Matriz de permisos» en el README)."
           }
         }
       ]
