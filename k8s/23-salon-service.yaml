@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: salon-service
+  namespace: restaurante
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: salon-service
+  template:
+    metadata:
+      labels:
+        app: salon-service
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: salon-service
+          image: restaurante/salon-service:1.0
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8084
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: docker
+            - name: TZ
+              value: America/Bogota
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:MaxRAMPercentage=75
+            - name: DB_URL
+              value: jdbc:mysql://mysql:3306/salondb?useSSL=false&allowPublicKeyRetrieval=true
+            - name: DB_USER
+              value: salon
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: restaurante-secretos
+                  key: SALON_DB_PASSWORD
+          resources:
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            tcpSocket:
+              port: 8084
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: salon-service
+  namespace: restaurante
+spec:
+  type: ClusterIP
+  selector:
+    app: salon-service
+  ports:
+    - port: 8084
+      targetPort: 8084

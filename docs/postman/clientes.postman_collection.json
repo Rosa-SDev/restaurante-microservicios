@@ -1,0 +1,1119 @@
+{
+  "info": {
+    "name": "Restaurante · clientes-service",
+    "description": "Clientes y reservas, consumidos a través del api-gateway. Variable base = http://localhost:8080 (Compose) o http://localhost:30080 (Kubernetes). Ejecutar con el Collection Runner, en orden.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "tokenMesero",
+      "value": ""
+    },
+    {
+      "key": "documento",
+      "value": ""
+    },
+    {
+      "key": "fechaFutura",
+      "value": ""
+    },
+    {
+      "key": "clienteId",
+      "value": ""
+    },
+    {
+      "key": "reservaId",
+      "value": ""
+    },
+    {
+      "key": "reservaMeseroId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1 · Autenticación",
+      "item": [
+        {
+          "name": "Login · administrador (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const token = pm.response.json().token;",
+                  "pm.collectionVariables.set(\"token\", token);",
+                  "if (pm.environment.name) { pm.environment.set(\"token\", token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/auth/login",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"administrador@restaurante.com\",\n  \"password\": \"admin123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Guarda el token en la variable {{token}}."
+          }
+        },
+        {
+          "name": "Login · mesero (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const token = pm.response.json().token;",
+                  "pm.collectionVariables.set(\"tokenMesero\", token);",
+                  "if (pm.environment.name) { pm.environment.set(\"tokenMesero\", token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/auth/login",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"mesero@restaurante.com\",\n  \"password\": \"mesero123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Guarda el token en la variable {{tokenMesero}}."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 · CRUD de clientes",
+      "item": [
+        {
+          "name": "POST · crear cliente (201)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Documento distinto en cada ejecución, para no chocar con el 409 de documento repetido.",
+                  "pm.collectionVariables.set(\"documento\", String(Date.now()).slice(-10));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 201\", () => {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.collectionVariables.set(\"clienteId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/clientes",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Carolina Vélez\",\n  \"documento\": \"{{documento}}\",\n  \"telefono\": \"3151234567\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Guarda el id en {{clienteId}}."
+          }
+        },
+        {
+          "name": "GET · listar clientes (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Devuelve una lista\", () => {",
+                  "    pm.expect(pm.response.json()).to.be.an(\"array\").that.is.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/clientes",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET · filtrar por nombre (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Todos contienen el nombre buscado\", () => {",
+                  "    pm.response.json().forEach(c => pm.expect(c.nombre).to.include(\"Carolina\"));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/clientes?nombre=Carolina",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes"
+              ],
+              "query": [
+                {
+                  "key": "nombre",
+                  "value": "Carolina"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET · consultar por id (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/clientes/{{clienteId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{clienteId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT · actualizar cliente (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Se actualizó el nombre\", () => {",
+                  "    pm.expect(pm.response.json().nombre).to.eql(\"Carolina Vélez Ríos\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/clientes/{{clienteId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{clienteId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Carolina Vélez Ríos\",\n  \"documento\": \"{{documento}}\",\n  \"telefono\": \"3159876543\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 · Reservas",
+      "item": [
+        {
+          "name": "POST · crear reserva (201)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Fecha dentro de 2 días a las 19:00, en formato LocalDateTime (sin zona).",
+                  "const d = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);",
+                  "const p = n => String(n).padStart(2, \"0\");",
+                  "pm.collectionVariables.set(\"fechaFutura\", `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T19:00:00`);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 201\", () => {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Queda en estado PENDIENTE\", () => {",
+                  "    pm.expect(pm.response.json().estado).to.eql(\"PENDIENTE\");",
+                  "});",
+                  "pm.collectionVariables.set(\"reservaId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/reservas",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fechaHora\": \"{{fechaFutura}}\",\n  \"numPersonas\": 4,\n  \"clienteId\": {{clienteId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Guarda el id en {{reservaId}}."
+          }
+        },
+        {
+          "name": "GET · listar reservas (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/reservas",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET · filtrar por estado (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Todas están PENDIENTE\", () => {",
+                  "    pm.response.json().forEach(r => pm.expect(r.estado).to.eql(\"PENDIENTE\"));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/reservas?estado=PENDIENTE",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ],
+              "query": [
+                {
+                  "key": "estado",
+                  "value": "PENDIENTE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET · consultar por id (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/reservas/{{reservaId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "reservas",
+                "{{reservaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT · confirmar reserva (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 200\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Queda CONFIRMADA\", () => {",
+                  "    pm.expect(pm.response.json().estado).to.eql(\"CONFIRMADA\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/reservas/{{reservaId}}/estado",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "reservas",
+                "{{reservaId}}",
+                "estado"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nuevoEstado\": \"CONFIRMADA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 · Errores 400, 404 y 409",
+      "item": [
+        {
+          "name": "POST cliente · cuerpo inválido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 400\", () => {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/clientes",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"documento\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST cliente · documento repetido (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 409\", () => {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test(\"Mensaje de error\", () => {",
+                  "    pm.expect(pm.response.json().error).to.include(\"Ya existe un cliente\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/clientes",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Otra persona\",\n  \"documento\": \"{{documento}}\",\n  \"telefono\": \"3000000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET cliente · inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 404\", () => {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/clientes/999999",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "999999"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST reserva · fecha pasada (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 400\", () => {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"Mensaje de error\", () => {",
+                  "    pm.expect(pm.response.json().error).to.include(\"ya pasó\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/reservas",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fechaHora\": \"2020-01-01T19:00:00\",\n  \"numPersonas\": 2,\n  \"clienteId\": {{clienteId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PUT reserva · transición inválida (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 409\", () => {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test(\"Mensaje de error\", () => {",
+                  "    pm.expect(pm.response.json().error).to.include(\"No se puede pasar\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/reservas/{{reservaId}}/estado",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "reservas",
+                "{{reservaId}}",
+                "estado"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nuevoEstado\": \"PENDIENTE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Una reserva CONFIRMADA no puede volver a PENDIENTE."
+          }
+        },
+        {
+          "name": "DELETE cliente · tiene reservas (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 409\", () => {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "pm.test(\"Mensaje de error\", () => {",
+                  "    pm.expect(pm.response.json().error).to.include(\"tiene reservas\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/clientes/{{clienteId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{clienteId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5 · Seguridad del gateway (401 y 403)",
+      "item": [
+        {
+          "name": "GET clientes · sin token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 401\", () => {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test(\"Mensaje de error\", () => {",
+                  "    pm.expect(pm.response.json().error).to.include(\"Debe iniciar sesión\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/clientes",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "POST reserva · con mesero (201)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 201\", () => {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.collectionVariables.set(\"reservaMeseroId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base}}/api/reservas",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "reservas"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fechaHora\": \"{{fechaFutura}}\",\n  \"numPersonas\": 2,\n  \"clienteId\": {{clienteId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenMesero}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Crear reservas es operación diaria: cualquier rol autenticado puede."
+          }
+        },
+        {
+          "name": "DELETE reserva · con mesero (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 403\", () => {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test(\"Mensaje de error\", () => {",
+                  "    pm.expect(pm.response.json().error).to.include(\"No tiene permisos\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/reservas/{{reservaMeseroId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "reservas",
+                "{{reservaMeseroId}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenMesero}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Los DELETE de reservas y clientes son solo del ADMINISTRADOR (ver «Matriz de permisos» en el README)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6 · Eliminar (administrador)",
+      "item": [
+        {
+          "name": "DELETE · eliminar reserva (204)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 204\", () => {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/reservas/{{reservaId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "reservas",
+                "{{reservaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE · eliminar reserva del mesero (204)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 204\", () => {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/reservas/{{reservaMeseroId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "reservas",
+                "{{reservaMeseroId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE · eliminar cliente (204)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 204\", () => {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/clientes/{{clienteId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{clienteId}}"
+              ]
+            },
+            "description": "Ya no tiene reservas, así que se puede borrar."
+          }
+        },
+        {
+          "name": "GET · cliente eliminado (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Responde 404\", () => {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base}}/api/clientes/{{clienteId}}",
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "clientes",
+                "{{clienteId}}"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

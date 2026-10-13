@@ -29,3 +29,7 @@ spring:
               uri: http://localhost:8084
               predicates:
                 - Path=/api/mesas/**,/api/pedidos/**,/api/facturas/**
+
+seguridad:
+  jwt:
+    secreto: clave-de-desarrollo-local-no-usar-en-docker-2026

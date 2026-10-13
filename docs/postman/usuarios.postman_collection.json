@@ -1,0 +1,647 @@
+{
+  "info": {
+    "name": "Restaurante · usuarios-service",
+    "description": "Autenticación y gestión de usuarios, consumidos a través del api-gateway. Variable base = http://localhost:8080 (Compose) o http://localhost:30080 (Kubernetes). Ejecutar con el Collection Runner, en orden.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "tokenMesero",
+      "value": ""
+    },
+    {
+      "key": "usuarioId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1 · Autenticación",
+      "item": [
+        {
+          "name": "Login · administrador (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 con token Bearer\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j.token).to.be.a(\"string\").and.not.empty;",
+                  "    pm.expect(j.tipo).to.eql(\"Bearer\");",
+                  "    pm.expect(j.expiraEn).to.eql(3600);",
+                  "    pm.expect(j.usuario.rol).to.eql(\"ADMINISTRADOR\");",
+                  "});",
+                  "pm.test(\"El hash nunca sale en la respuesta\", () => {",
+                  "    pm.expect(pm.response.text()).to.not.include(\"passwordHash\");",
+                  "});",
+                  "const token = pm.response.json().token;",
+                  "pm.collectionVariables.set(\"token\", token);",
+                  "if (pm.environment.name) { pm.environment.set(\"token\", token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ],
+              "raw": "{{base}}/api/auth/login"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"administrador@restaurante.com\",\n  \"password\": \"admin123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Guarda el token del administrador en la variable {{token}}."
+          }
+        },
+        {
+          "name": "Login · clave incorrecta (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401 y sin token\", () => {",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json()).to.not.have.property(\"token\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ],
+              "raw": "{{base}}/api/auth/login"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"administrador@restaurante.com\",\n  \"password\": \"clave-equivocada\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 · CRUD de usuarios (administrador)",
+      "item": [
+        {
+          "name": "POST · crear usuario (201)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"201 y sin hash\", () => {",
+                  "    pm.response.to.have.status(201);",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j.correo).to.eql(\"prueba.postman@restaurante.com\");",
+                  "    pm.expect(j).to.not.have.property(\"passwordHash\");",
+                  "    pm.collectionVariables.set(\"usuarioId\", j.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ],
+              "raw": "{{base}}/api/usuarios"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Prueba Postman\",\n  \"correo\": \"prueba.postman@restaurante.com\",\n  \"rol\": \"MESERO\",\n  \"password\": \"prueba123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Guarda el id del usuario creado en {{usuarioId}}. Si responde 409, el usuario quedó de una corrida anterior: bórralo o cambia el correo."
+          }
+        },
+        {
+          "name": "GET · listar usuarios (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 con al menos los 4 usuarios de demostración, sin hash\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const j = pm.response.json();",
+                  "    pm.expect(j).to.be.an(\"array\");",
+                  "    pm.expect(j.length).to.be.at.least(4);",
+                  "    pm.expect(pm.response.text()).to.not.include(\"passwordHash\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ],
+              "raw": "{{base}}/api/usuarios"
+            }
+          }
+        },
+        {
+          "name": "GET · filtrar por rol (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 y todos son MESERO\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.response.json().forEach(u => pm.expect(u.rol).to.eql(\"MESERO\"));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ],
+              "query": [
+                {
+                  "key": "rol",
+                  "value": "MESERO"
+                }
+              ],
+              "raw": "{{base}}/api/usuarios?rol=MESERO"
+            }
+          }
+        },
+        {
+          "name": "GET · consultar por id (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 y es el usuario creado\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(String(pm.response.json().id)).to.eql(String(pm.collectionVariables.get(\"usuarioId\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "{{usuarioId}}"
+              ],
+              "raw": "{{base}}/api/usuarios/{{usuarioId}}"
+            }
+          }
+        },
+        {
+          "name": "PUT · actualizar usuario (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 y nombre actualizado\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().nombre).to.eql(\"Prueba Postman Actualizada\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "{{usuarioId}}"
+              ],
+              "raw": "{{base}}/api/usuarios/{{usuarioId}}"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Prueba Postman Actualizada\",\n  \"correo\": \"prueba.postman@restaurante.com\",\n  \"rol\": \"MESERO\",\n  \"password\": \"prueba456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE · eliminar usuario (204)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"204 sin contenido\", () => {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "{{usuarioId}}"
+              ],
+              "raw": "{{base}}/api/usuarios/{{usuarioId}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 · Errores 400, 404 y 409",
+      "item": [
+        {
+          "name": "POST · cuerpo inválido (400)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"400 con mensaje de error\", () => {",
+                  "    pm.response.to.have.status(400);",
+                  "    pm.expect(pm.response.json()).to.have.property(\"error\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ],
+              "raw": "{{base}}/api/usuarios"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"\",\n  \"correo\": \"invalido@restaurante.com\",\n  \"rol\": \"MESERO\",\n  \"password\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET · usuario inexistente (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"404 con mensaje de error\", () => {",
+                  "    pm.response.to.have.status(404);",
+                  "    pm.expect(pm.response.json()).to.have.property(\"error\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "999999"
+              ],
+              "raw": "{{base}}/api/usuarios/999999"
+            }
+          }
+        },
+        {
+          "name": "POST · correo repetido (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"409 con mensaje de error\", () => {",
+                  "    pm.response.to.have.status(409);",
+                  "    pm.expect(pm.response.json()).to.have.property(\"error\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ],
+              "raw": "{{base}}/api/usuarios"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Otro Administrador\",\n  \"correo\": \"administrador@restaurante.com\",\n  \"rol\": \"ADMINISTRADOR\",\n  \"password\": \"otra-clave-123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 · Seguridad del gateway (401 y 403)",
+      "item": [
+        {
+          "name": "Login · mesero (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"200 con rol MESERO\", () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.json().usuario.rol).to.eql(\"MESERO\");",
+                  "});",
+                  "const token = pm.response.json().token;",
+                  "pm.collectionVariables.set(\"tokenMesero\", token);",
+                  "if (pm.environment.name) { pm.environment.set(\"tokenMesero\", token); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ],
+              "raw": "{{base}}/api/auth/login"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"mesero@restaurante.com\",\n  \"password\": \"mesero123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Guarda el token del mesero en {{tokenMesero}}, sin pisar el del administrador."
+          }
+        },
+        {
+          "name": "GET usuarios · sin token (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"401: el gateway exige token\", () => {",
+                  "    pm.response.to.have.status(401);",
+                  "    pm.expect(pm.response.json()).to.have.property(\"error\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ],
+              "raw": "{{base}}/api/usuarios"
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Solo da 401 a través del gateway (:8080). Directo a :8081 responde 200."
+          }
+        },
+        {
+          "name": "GET usuarios · con mesero (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"403: el mesero no puede gestionar usuarios\", () => {",
+                  "    pm.response.to.have.status(403);",
+                  "    pm.expect(pm.response.json()).to.have.property(\"error\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "host": [
+                "{{base}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ],
+              "raw": "{{base}}/api/usuarios"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tokenMesero}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Solo da 403 a través del gateway (:8080)."
+          }
+        }
+      ]
+    }
+  ]
+}

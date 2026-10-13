@@ -21,3 +21,8 @@ spring:
     console:
       enabled: true
       path: /h2-console
+
+seguridad:
+  jwt:
+    secreto: clave-de-desarrollo-local-no-usar-en-docker-2026
+    expiracion-segundos: 3600

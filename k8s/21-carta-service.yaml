@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: carta-service
+  namespace: restaurante
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: carta-service
+  template:
+    metadata:
+      labels:
+        app: carta-service
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: carta-service
+          image: restaurante/carta-service:1.0
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8082
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: docker
+            - name: TZ
+              value: America/Bogota
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:MaxRAMPercentage=75
+            - name: DB_URL
+              value: jdbc:mysql://mysql:3306/cartadb?useSSL=false&allowPublicKeyRetrieval=true
+            - name: DB_USER
+              value: carta
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: restaurante-secretos
+                  key: CARTA_DB_PASSWORD
+          resources:
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            tcpSocket:
+              port: 8082
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: carta-service
+  namespace: restaurante
+spec:
+  type: ClusterIP
+  selector:
+    app: carta-service
+  ports:
+    - port: 8082
+      targetPort: 8082
