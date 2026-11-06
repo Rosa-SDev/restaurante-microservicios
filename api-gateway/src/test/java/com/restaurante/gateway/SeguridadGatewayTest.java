@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
@@ -28,9 +29,11 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import static org.hamcrest.Matchers.equalTo;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -43,9 +46,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * 4. DELETE /api/platillos/1 con rol MESERO → 403, porque los borrados bajo
  *    /api/** son solo del ADMINISTRADOR.
  * 5. GET /api/mesas con un token bien firmado pero de otro emisor → 401.
+ * 6. GET /api/pagos sin token → 401.
+ * 7. POST /api/pagos con solo el scope pagos:leer → 403.
  *
  * Los tokens se firman con RS256 usando el par RSA de prueba; el gateway recibe
  * la clave pública de ese par por @DynamicPropertySource.
+ *
+ * Ninguna prueba manda un token como Bearer a /api/pagos: esa cadena descarga
+ * las claves de Keycloak, que no está corriendo. El caso 7 usa jwt() de
+ * spring-security-test, que deja la autenticación lista sin pasar por el
+ * decodificador.
  *
  * No se prueba ningún caso con permiso suficiente: el gateway intentaría
  * reenviar la petición a un servicio que no está corriendo.
@@ -122,6 +132,21 @@ class SeguridadGatewayTest {
                         .header("Authorization", "Bearer " + tokenDePrueba("otro-emisor", "ADMINISTRADOR")))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error", equalTo(SIN_TOKEN_VALIDO)));
+    }
+
+    @Test
+    void pagosSinTokenDevuelve401() throws Exception {
+        mockMvc.perform(get("/api/pagos"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error", equalTo(SIN_TOKEN_VALIDO)));
+    }
+
+    @Test
+    void scopeDeLecturaNoRegistraPagos() throws Exception {
+        mockMvc.perform(post("/api/pagos")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("SCOPE_pagos:leer"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error", equalTo(SIN_PERMISOS)));
     }
 
     /**

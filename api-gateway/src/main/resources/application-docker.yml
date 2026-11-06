@@ -32,3 +32,6 @@ spring:
 seguridad:
   jwt:
     clave-publica: ${JWT_CLAVE_PUBLICA}
+  oauth2:
+    emisor: ${OAUTH_ISSUER_URI}
+    jwks: ${OAUTH_JWKS_URI}

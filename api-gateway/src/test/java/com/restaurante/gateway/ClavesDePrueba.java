@@ -43,9 +43,13 @@ final class ClavesDePrueba {
      * Apunta las propiedades del gateway a lo que generan las pruebas. La ruta va
      * como URI (file:///...) para que los espacios y las letras de unidad de
      * Windows no causen problemas.
+     *
+     * El JWKS apunta a una dirección donde no escucha nadie: ninguna prueba debe
+     * necesitar Keycloak, y si alguna intentara descargarlo, fallaría a la vista.
      */
     static void registrar(DynamicPropertyRegistry registro) {
         registro.add("seguridad.jwt.clave-publica", () -> PUBLICA.toUri().toString());
+        registro.add("seguridad.oauth2.jwks", () -> "http://localhost:9/jwks-inexistente");
     }
 
     static KeyPair generarPar() {

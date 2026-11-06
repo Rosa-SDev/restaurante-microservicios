@@ -38,3 +38,6 @@ spring:
 seguridad:
   jwt:
     clave-publica: file:../claves/publica.pem
+  oauth2:
+    emisor: http://localhost:30180/realms/restaurante
+    jwks: http://localhost:30180/realms/restaurante/protocol/openid-connect/certs
