@@ -26,4 +26,4 @@ spring:
 
 seguridad:
   jwt:
-    secreto: ${JWT_SECRET}
+    clave-publica: ${JWT_CLAVE_PUBLICA}

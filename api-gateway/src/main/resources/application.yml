@@ -32,4 +32,4 @@ spring:
 
 seguridad:
   jwt:
-    secreto: clave-de-desarrollo-local-no-usar-en-docker-2026
+    clave-publica: file:../claves/publica.pem

@@ -1,8 +1,6 @@
 package com.restaurante.gateway.seguridad;
 
-import java.nio.charset.StandardCharsets;
-
-import javax.crypto.spec.SecretKeySpec;
+import java.security.interfaces.RSAPublicKey;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -12,7 +10,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
@@ -24,21 +22,27 @@ import org.springframework.security.web.SecurityFilterChain;
  * quién puede entrar a cada ruta antes de reenviar la petición.
  *
  * El token viaja en la cabecera Authorization, con el prefijo Bearer, firmado
- * con HS256. La clave son los bytes UTF-8 de la propiedad seguridad.jwt.secreto.
- * En el perfil docker ese valor sale de la variable JWT_SECRET, que no tiene
+ * con RS256. usuarios-service firma con su clave privada y el gateway solo
+ * conoce la pública, que llega por la propiedad seguridad.jwt.clave-publica.
+ * Con esa clave el gateway puede comprobar un token, pero no fabricarlo. En el
+ * perfil docker la ruta sale de la variable JWT_CLAVE_PUBLICA, que no tiene
  * valor por omisión: si falta, el gateway no arranca.
  */
 @Configuration
 @EnableWebSecurity
 public class SeguridadConfig {
 
-    private final String secreto;
+    private final RSAPublicKey clavePublica;
 
     private final RespuestasDeSeguridad respuestas;
 
-    public SeguridadConfig(@Value("${seguridad.jwt.secreto}") String secreto,
+    /**
+     * Spring Security convierte por sí solo la propiedad en una RSAPublicKey: lee
+     * el archivo PEM (file: o classpath:) en formato X.509 BEGIN PUBLIC KEY.
+     */
+    public SeguridadConfig(@Value("${seguridad.jwt.clave-publica}") RSAPublicKey clavePublica,
                            RespuestasDeSeguridad respuestas) {
-        this.secreto = secreto;
+        this.clavePublica = clavePublica;
         this.respuestas = respuestas;
     }
 
@@ -56,8 +60,7 @@ public class SeguridadConfig {
      * cuerpo.
      */
     @Bean
-    SecurityFilterChain cadenaDeSeguridad(HttpSecurity http, JwtDecoder decodificador,
-                                          JwtAuthenticationConverter convertidor) throws Exception {
+    SecurityFilterChain cadenaDeSeguridad(HttpSecurity http) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(sesiones -> sesiones.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -69,8 +72,8 @@ public class SeguridadConfig {
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(servidor -> servidor
                         .jwt(token -> token
-                                .decoder(decodificador)
-                                .jwtAuthenticationConverter(convertidor))
+                                .decoder(decodificadorDeUsuarios())
+                                .jwtAuthenticationConverter(convertidorDeRol()))
                         .authenticationEntryPoint(respuestas)
                         .accessDeniedHandler(respuestas))
                 .exceptionHandling(errores -> errores
@@ -80,14 +83,12 @@ public class SeguridadConfig {
     }
 
     /**
-     * Comprueba la firma HS256 y el vencimiento, que son los validadores que trae
-     * por omisión.
+     * Comprueba la firma RS256 con la clave pública y el vencimiento, que es el
+     * validador que trae por omisión.
      */
-    @Bean
-    JwtDecoder decodificadorDeTokens() {
-        SecretKeySpec clave = new SecretKeySpec(secreto.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-        return NimbusJwtDecoder.withSecretKey(clave)
-                .macAlgorithm(MacAlgorithm.HS256)
+    private JwtDecoder decodificadorDeUsuarios() {
+        return NimbusJwtDecoder.withPublicKey(clavePublica)
+                .signatureAlgorithm(SignatureAlgorithm.RS256)
                 .build();
     }
 
@@ -95,8 +96,7 @@ public class SeguridadConfig {
      * Convierte el claim "rol" del token en la autoridad ROLE_ más el rol, que es
      * la forma que espera hasRole.
      */
-    @Bean
-    JwtAuthenticationConverter convertidorDeRol() {
+    private JwtAuthenticationConverter convertidorDeRol() {
         JwtGrantedAuthoritiesConverter autoridades = new JwtGrantedAuthoritiesConverter();
         autoridades.setAuthoritiesClaimName("rol");
         autoridades.setAuthorityPrefix("ROLE_");
