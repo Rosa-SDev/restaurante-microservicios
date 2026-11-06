@@ -30,6 +30,11 @@ spring:
               predicates:
                 - Path=/api/mesas/**,/api/pedidos/**,/api/facturas/**
 
+            - id: pagos
+              uri: http://localhost:8085
+              predicates:
+                - Path=/api/pagos/**
+
 seguridad:
   jwt:
     clave-publica: file:../claves/publica.pem
