@@ -34,3 +34,4 @@ build/
 
 ### Configuración local ###
 .env
+claves/
