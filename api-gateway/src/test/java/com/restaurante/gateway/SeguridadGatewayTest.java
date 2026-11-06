@@ -42,6 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *    ADMINISTRADOR.
  * 4. DELETE /api/platillos/1 con rol MESERO → 403, porque los borrados bajo
  *    /api/** son solo del ADMINISTRADOR.
+ * 5. GET /api/mesas con un token bien firmado pero de otro emisor → 401.
  *
  * Los tokens se firman con RS256 usando el par RSA de prueba; el gateway recibe
  * la clave pública de ese par por @DynamicPropertySource.
@@ -113,6 +114,14 @@ class SeguridadGatewayTest {
                         .header("Authorization", "Bearer " + tokenDePrueba(EMISOR_USUARIOS, "MESERO")))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.error", equalTo(SIN_PERMISOS)));
+    }
+
+    @Test
+    void tokenDeOtroEmisorDevuelve401() throws Exception {
+        mockMvc.perform(get("/api/mesas")
+                        .header("Authorization", "Bearer " + tokenDePrueba("otro-emisor", "ADMINISTRADOR")))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error", equalTo(SIN_TOKEN_VALIDO)));
     }
 
     /**

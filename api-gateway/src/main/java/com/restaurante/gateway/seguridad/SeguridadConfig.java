@@ -12,6 +12,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
@@ -31,6 +32,11 @@ import org.springframework.security.web.SecurityFilterChain;
 @Configuration
 @EnableWebSecurity
 public class SeguridadConfig {
+
+    /**
+     * Valor del claim iss en los tokens que firma usuarios-service.
+     */
+    private static final String EMISOR_USUARIOS = "usuarios-service";
 
     private final RSAPublicKey clavePublica;
 
@@ -83,13 +89,17 @@ public class SeguridadConfig {
     }
 
     /**
-     * Comprueba la firma RS256 con la clave pública y el vencimiento, que es el
-     * validador que trae por omisión.
+     * Comprueba la firma RS256 con la clave pública, el vencimiento y que el
+     * emisor sea usuarios-service. La clave pública se puede repartir sin
+     * riesgo, así que el emisor es una segunda comprobación de que el token salió
+     * de donde debe.
      */
     private JwtDecoder decodificadorDeUsuarios() {
-        return NimbusJwtDecoder.withPublicKey(clavePublica)
+        NimbusJwtDecoder decodificador = NimbusJwtDecoder.withPublicKey(clavePublica)
                 .signatureAlgorithm(SignatureAlgorithm.RS256)
                 .build();
+        decodificador.setJwtValidator(JwtValidators.createDefaultWithIssuer(EMISOR_USUARIOS));
+        return decodificador;
     }
 
     /**
