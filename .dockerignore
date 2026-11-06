@@ -6,3 +6,6 @@
 docker/
 k8s/
 docs/
+claves/
+keycloak/
+scripts/
