@@ -35,6 +35,7 @@
 		<module>carta-service</module>
 		<module>clientes-service</module>
 		<module>salon-service</module>
+		<module>pagos-service</module>
 		<module>api-gateway</module>
 	</modules>
 
