@@ -51,7 +51,10 @@ services:
       DB_URL: jdbc:mysql://mysql:3306/usuariosdb?useSSL=false&allowPublicKeyRetrieval=true
       DB_USER: usuarios
       DB_PASSWORD: ${USUARIOS_DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_CLAVE_PRIVADA: file:/claves/privada.pem
+      JWT_CLAVE_PUBLICA: file:/claves/publica.pem
+    volumes:
+      - ./claves:/claves:ro
     mem_limit: 512m
     depends_on:
       mysql:
