@@ -108,6 +108,27 @@ services:
       mysql:
         condition: service_healthy
 
+  pagos-service:
+    build:
+      context: .
+      dockerfile: pagos-service/Dockerfile
+    image: restaurante/pagos-service:1.0
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      TZ: America/Bogota
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+      DB_URL: jdbc:mysql://mysql:3306/pagosdb?useSSL=false&allowPublicKeyRetrieval=true
+      DB_USER: pagos
+      DB_PASSWORD: ${PAGOS_DB_PASSWORD}
+      OAUTH_ISSUER_URI: http://localhost:30180/realms/restaurante
+      OAUTH_JWKS_URI: http://keycloak:8080/realms/restaurante/protocol/openid-connect/certs
+    mem_limit: 512m
+    depends_on:
+      mysql:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
   api-gateway:
     build:
       context: .
