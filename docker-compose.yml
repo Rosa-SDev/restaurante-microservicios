@@ -9,6 +9,7 @@ services:
       CARTA_DB_PASSWORD: ${CARTA_DB_PASSWORD}
       CLIENTES_DB_PASSWORD: ${CLIENTES_DB_PASSWORD}
       SALON_DB_PASSWORD: ${SALON_DB_PASSWORD}
+      PAGOS_DB_PASSWORD: ${PAGOS_DB_PASSWORD}
       TZ: America/Bogota
     volumes:
       - mysql-datos:/var/lib/mysql
