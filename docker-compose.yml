@@ -141,7 +141,11 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       TZ: America/Bogota
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_CLAVE_PUBLICA: file:/claves/publica.pem
+      OAUTH_ISSUER_URI: http://localhost:30180/realms/restaurante
+      OAUTH_JWKS_URI: http://keycloak:8080/realms/restaurante/protocol/openid-connect/certs
+    volumes:
+      - ./claves/publica.pem:/claves/publica.pem:ro
     ports:
       - "8080:8080"
     mem_limit: 384m
@@ -150,6 +154,8 @@ services:
       - carta-service
       - clientes-service
       - salon-service
+      - pagos-service
+      - keycloak
 
 volumes:
   mysql-datos:
