@@ -22,3 +22,11 @@ spring:
       enabled: true
       path: /h2-console
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:30180/realms/restaurante
+          jwk-set-uri: http://localhost:30180/realms/restaurante/protocol/openid-connect/certs
+          audiences: pagos-api
+
