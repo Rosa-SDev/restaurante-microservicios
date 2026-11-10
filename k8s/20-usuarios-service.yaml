@@ -36,11 +36,14 @@ spec:
                 secretKeyRef:
                   name: restaurante-secretos
                   key: USUARIOS_DB_PASSWORD
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: restaurante-secretos
-                  key: JWT_SECRET
+            - name: JWT_CLAVE_PRIVADA
+              value: file:/claves/privada.pem
+            - name: JWT_CLAVE_PUBLICA
+              value: file:/claves/publica.pem
+          volumeMounts:
+            - name: claves
+              mountPath: /claves
+              readOnly: true
           resources:
             limits:
               memory: 512Mi
@@ -49,6 +52,10 @@ spec:
               port: 8081
             initialDelaySeconds: 20
             periodSeconds: 10
+      volumes:
+        - name: claves
+          secret:
+            secretName: restaurante-claves
 ---
 apiVersion: v1
 kind: Service

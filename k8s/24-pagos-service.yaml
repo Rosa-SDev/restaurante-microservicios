@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pagos-service
+  namespace: restaurante
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pagos-service
+  template:
+    metadata:
+      labels:
+        app: pagos-service
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: pagos-service
+          image: restaurante/pagos-service:1.0
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8085
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: docker
+            - name: TZ
+              value: America/Bogota
+            - name: JAVA_TOOL_OPTIONS
+              value: -XX:MaxRAMPercentage=75
+            - name: DB_URL
+              value: jdbc:mysql://mysql:3306/pagosdb?useSSL=false&allowPublicKeyRetrieval=true
+            - name: DB_USER
+              value: pagos
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: restaurante-secretos
+                  key: PAGOS_DB_PASSWORD
+            - name: OAUTH_ISSUER_URI
+              value: http://localhost:30180/realms/restaurante
+            - name: OAUTH_JWKS_URI
+              value: http://keycloak:8080/realms/restaurante/protocol/openid-connect/certs
+          resources:
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            tcpSocket:
+              port: 8085
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pagos-service
+  namespace: restaurante
+spec:
+  type: ClusterIP
+  selector:
+    app: pagos-service
+  ports:
+    - port: 8085
+      targetPort: 8085
