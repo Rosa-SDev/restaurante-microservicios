@@ -24,5 +24,6 @@ spring:
 
 seguridad:
   jwt:
-    secreto: clave-de-desarrollo-local-no-usar-en-docker-2026
+    clave-privada: file:../claves/privada.pem
+    clave-publica: file:../claves/publica.pem
     expiracion-segundos: 3600
