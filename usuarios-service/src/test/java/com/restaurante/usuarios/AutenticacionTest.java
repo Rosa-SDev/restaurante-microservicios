@@ -1,49 +1,52 @@
 package com.restaurante.usuarios;
 
 import com.jayway.jsonpath.JsonPath;
+import com.restaurante.usuarios.config.SeguridadConfig;
 import com.restaurante.usuarios.repository.UsuarioRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
-
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Pruebas del login con token: forma de la respuesta, token verificable con la clave compartida,
- * rechazo de claves incorrectas y contraseñas guardadas con BCrypt.
+ * Pruebas del login con token: forma de la respuesta, token RS256 verificable con la clave pública,
+ * rechazo de una clave pública ajena y contraseñas guardadas con BCrypt.
  */
 @SpringBootTest
 class AutenticacionTest {
     private static final String CORREO_ADMIN = "administrador@restaurante.com";
+
+    @DynamicPropertySource
+    static void claves(DynamicPropertyRegistry registro) {
+        ClavesRsaTest.registrar(registro);
+    }
 
     @Autowired
     private WebApplicationContext webApplicationContext;
 
     @Autowired
     private UsuarioRepository repositorio;
-
-    @Value("${seguridad.jwt.secreto}")
-    private String secreto;
 
     private MockMvc mockMvc;
 
@@ -59,6 +62,15 @@ class AutenticacionTest {
                     "password": "%s"
                 }
                 """.formatted(correo, password);
+    }
+
+    private String loginDelAdministrador() throws Exception {
+        String respuesta = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cuerpoLogin(CORREO_ADMIN, "admin123")))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(respuesta, "$.token");
     }
 
     @Test
@@ -77,27 +89,32 @@ class AutenticacionTest {
     }
 
     @Test
-    void elTokenSeVerificaConLaClaveCompartidaYLlevaLosClaimsEsperados() throws Exception {
-        String respuesta = mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(cuerpoLogin(CORREO_ADMIN, "admin123")))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
+    void elTokenSeVerificaConLaClavePublicaYLlevaLosClaimsEsperados() throws Exception {
+        String token = loginDelAdministrador();
 
-        String token = JsonPath.read(respuesta, "$.token");
-
-        // Mismo mecanismo que usa el gateway: clave HMAC a partir de los bytes UTF-8 del secreto
-        SecretKey clave = new SecretKeySpec(secreto.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-        Jwt jwt = NimbusJwtDecoder.withSecretKey(clave)
-                .macAlgorithm(MacAlgorithm.HS256)
+        // Mismo mecanismo que usará el gateway: solo la clave pública, RS256
+        Jwt jwt = NimbusJwtDecoder.withPublicKey(ClavesRsaTest.clavePublica())
                 .build()
                 .decode(token);
 
+        assertEquals("RS256", jwt.getHeaders().get("alg"));
+        assertEquals(SeguridadConfig.KID, jwt.getHeaders().get("kid"));
         assertEquals("ADMINISTRADOR", jwt.getClaimAsString("rol"));
         assertEquals(CORREO_ADMIN, jwt.getSubject());
         assertEquals("usuarios-service", jwt.getClaimAsString("iss"));
         assertEquals(3600, jwt.getExpiresAt().getEpochSecond() - jwt.getIssuedAt().getEpochSecond());
         assertTrue(jwt.hasClaim("uid"));
+    }
+
+    @Test
+    void unaClavePublicaAjenaRechazaElToken() throws Exception {
+        String token = loginDelAdministrador();
+
+        JwtDecoder decodificadorAjeno = NimbusJwtDecoder
+                .withPublicKey(ClavesRsaTest.otraClavePublica())
+                .build();
+
+        assertThrows(JwtException.class, () -> decodificadorAjeno.decode(token));
     }
 
     @Test
