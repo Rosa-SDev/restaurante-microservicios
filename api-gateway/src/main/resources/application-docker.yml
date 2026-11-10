@@ -24,6 +24,14 @@ spring:
               predicates:
                 - Path=/api/mesas/**,/api/pedidos/**,/api/facturas/**
 
+            - id: pagos
+              uri: http://pagos-service:8085
+              predicates:
+                - Path=/api/pagos/**
+
 seguridad:
   jwt:
-    secreto: ${JWT_SECRET}
+    clave-publica: ${JWT_CLAVE_PUBLICA}
+  oauth2:
+    emisor: ${OAUTH_ISSUER_URI}
+    jwks: ${OAUTH_JWKS_URI}
