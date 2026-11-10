@@ -492,6 +492,17 @@
       ],
       "notBefore": 0,
       "groups": []
+    },
+    {
+      "username": "cajero@restaurante.com",
+      "email": "cajero@restaurante.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Cajero",
+      "lastName": "Demo",
+      "credentials": [
+        { "type": "password", "value": "cajero123", "temporary": false }
+      ]
     }
   ],
   "scopeMappings": [
@@ -2743,19 +2754,5 @@
   },
   "clientPolicies": {
     "policies": []
-  },
-  "users": [
-    {
-      "username": "cajero@restaurante.com",
-      "email": "cajero@restaurante.com",
-      "emailVerified": true,
-      "enabled": true,
-      "firstName": "Cajero",
-      "lastName": "Demo",
-      "credentials": [
-        { "type": "password", "value": "cajero123", "temporary": false }
-      ]
-    }
-  ]
-
+  }
 }
