@@ -9,6 +9,8 @@ import com.restaurante.pagos.service.PagoService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,9 +39,22 @@ public class PagoController {
 
     /** 201 con el pago registrado en estado PENDIENTE. */
     @PostMapping
-    public ResponseEntity<PagoDTO> registrar(@Valid @RequestBody CrearPagoDTO datos) {
-        Pago creado = servicio.registrar(datos, "sistema");
+    public ResponseEntity<PagoDTO> registrar(@Valid @RequestBody CrearPagoDTO datos,
+                                             @AuthenticationPrincipal Jwt jwt) {
+        Pago creado = servicio.registrar(datos, extraerRegistradoPor(jwt));
         return ResponseEntity.status(HttpStatus.CREATED).body(PagoDTO.de(creado));
+    }
+
+    private String extraerRegistradoPor(Jwt jwt) {
+        String usuario = jwt.getClaimAsString("preferred_username");
+        if (usuario != null && !usuario.isBlank()) {
+            return usuario;
+        }
+        String cliente = jwt.getClaimAsString("azp");
+        if (cliente != null && !cliente.isBlank()) {
+            return cliente;
+        }
+        return jwt.getSubject();
     }
 
     /** 200 con la lista de pagos, con filtros opcionales por estado y facturaId. */
