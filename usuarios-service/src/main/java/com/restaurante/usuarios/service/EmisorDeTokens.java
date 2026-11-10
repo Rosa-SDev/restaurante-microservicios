@@ -1,8 +1,9 @@
 package com.restaurante.usuarios.service;
 
+import com.restaurante.usuarios.config.SeguridadConfig;
 import com.restaurante.usuarios.dto.UsuarioDTO;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
 import org.springframework.security.oauth2.jwt.JwtClaimsSet;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -35,7 +36,7 @@ public class EmisorDeTokens {
                 .claim("rol", usuario.rol().name())
                 .build();
 
-        JwsHeader encabezado = JwsHeader.with(MacAlgorithm.HS256).build();
+        JwsHeader encabezado = JwsHeader.with(SignatureAlgorithm.RS256).keyId(SeguridadConfig.KID).build();
         return jwtEncoder.encode(JwtEncoderParameters.from(encabezado, claims)).getTokenValue();
     }
 
