@@ -9,6 +9,7 @@ services:
       CARTA_DB_PASSWORD: ${CARTA_DB_PASSWORD}
       CLIENTES_DB_PASSWORD: ${CLIENTES_DB_PASSWORD}
       SALON_DB_PASSWORD: ${SALON_DB_PASSWORD}
+      PAGOS_DB_PASSWORD: ${PAGOS_DB_PASSWORD}
       TZ: America/Bogota
     volumes:
       - mysql-datos:/var/lib/mysql
@@ -19,6 +20,24 @@ services:
       timeout: 5s
       retries: 12
       start_period: 40s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_HOSTNAME: http://localhost:30180
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+      PAGOS_CLIENTE_SECRET: ${PAGOS_CLIENTE_SECRET}
+      PAGOS_CONSULTA_SECRET: ${PAGOS_CONSULTA_SECRET}
+      TZ: America/Bogota
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - "30180:8080"
+    mem_limit: 1g
 
   usuarios-service:
     build:
@@ -32,7 +51,10 @@ services:
       DB_URL: jdbc:mysql://mysql:3306/usuariosdb?useSSL=false&allowPublicKeyRetrieval=true
       DB_USER: usuarios
       DB_PASSWORD: ${USUARIOS_DB_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_CLAVE_PRIVADA: file:/claves/privada.pem
+      JWT_CLAVE_PUBLICA: file:/claves/publica.pem
+    volumes:
+      - ./claves:/claves:ro
     mem_limit: 512m
     depends_on:
       mysql:
@@ -89,6 +111,27 @@ services:
       mysql:
         condition: service_healthy
 
+  pagos-service:
+    build:
+      context: .
+      dockerfile: pagos-service/Dockerfile
+    image: restaurante/pagos-service:1.0
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      TZ: America/Bogota
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+      DB_URL: jdbc:mysql://mysql:3306/pagosdb?useSSL=false&allowPublicKeyRetrieval=true
+      DB_USER: pagos
+      DB_PASSWORD: ${PAGOS_DB_PASSWORD}
+      OAUTH_ISSUER_URI: http://localhost:30180/realms/restaurante
+      OAUTH_JWKS_URI: http://keycloak:8080/realms/restaurante/protocol/openid-connect/certs
+    mem_limit: 512m
+    depends_on:
+      mysql:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
   api-gateway:
     build:
       context: .
@@ -98,7 +141,11 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       TZ: America/Bogota
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_CLAVE_PUBLICA: file:/claves/publica.pem
+      OAUTH_ISSUER_URI: http://localhost:30180/realms/restaurante
+      OAUTH_JWKS_URI: http://keycloak:8080/realms/restaurante/protocol/openid-connect/certs
+    volumes:
+      - ./claves/publica.pem:/claves/publica.pem:ro
     ports:
       - "8080:8080"
     mem_limit: 384m
@@ -107,6 +154,8 @@ services:
       - carta-service
       - clientes-service
       - salon-service
+      - pagos-service
+      - keycloak
 
 volumes:
   mysql-datos:
