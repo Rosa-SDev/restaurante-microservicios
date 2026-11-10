@@ -1,0 +1,629 @@
+{
+  "info": {
+    "name": "pagos-service",
+    "description": "Colección de pruebas del microservicio de pagos (OAuth 2.0 con Keycloak). Ejecútala con el Collection Runner, en orden, después de 00-autenticacion y 01-oauth2 con el environment “Restaurante” seleccionado: de ahí salen {{tokenPagos}}, {{tokenPagosConsulta}} y {{tokenAdministrador}}. La variable base apunta al api-gateway: http://localhost:8080 con Docker Compose, o http://localhost:30080 en Kubernetes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{tokenPagos}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "tokenPagos",
+      "value": ""
+    },
+    {
+      "key": "tokenPagosConsulta",
+      "value": ""
+    },
+    {
+      "key": "tokenAdministrador",
+      "value": ""
+    },
+    {
+      "key": "pagoId",
+      "value": ""
+    },
+    {
+      "key": "pagoRechazadoId",
+      "value": ""
+    },
+    {
+      "key": "facturaPruebaId",
+      "value": "1"
+    },
+    {
+      "key": "facturaRechazoId",
+      "value": "2"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Registrar pago",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const baseFactura = Math.floor(Date.now() / 1000);",
+              "pm.collectionVariables.set(\"facturaPruebaId\", String(baseFactura));",
+              "pm.collectionVariables.set(\"facturaRechazoId\", String(baseFactura + 1));"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 201 y el pago queda PENDIENTE\", () => {",
+              "    pm.response.to.have.status(201);",
+              "    const j = pm.response.json();",
+              "    pm.expect(j.estado).to.eql(\"PENDIENTE\");",
+              "    pm.expect(j.referencia).to.be.a(\"string\").and.not.empty;",
+              "    pm.expect(j.registradoPor).to.be.a(\"string\").and.not.empty;",
+              "});",
+              "pm.collectionVariables.set(\"pagoId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/pagos",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"facturaId\": {{facturaPruebaId}},\n  \"monto\": 58000.00,\n  \"metodo\": \"TARJETA\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "Registra un pago en estado PENDIENTE con {{tokenPagos}} y guarda el id en {{pagoId}}."
+      }
+    },
+    {
+      "name": "2. Listar pagos",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 200 con una lista de pagos\", () => {",
+              "    pm.response.to.have.status(200);",
+              "    const lista = pm.response.json();",
+              "    pm.expect(lista).to.be.an(\"array\").that.is.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base}}/api/pagos",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos"
+          ]
+        },
+        "description": "Lista todos los pagos registrados."
+      }
+    },
+    {
+      "name": "3. Consultar pago por ID",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 200 con el pago consultado\", () => {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(String(pm.response.json().id)).to.eql(String(pm.collectionVariables.get(\"pagoId\")));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base}}/api/pagos/{{pagoId}}",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos",
+            "{{pagoId}}"
+          ]
+        },
+        "description": "Consulta el pago recién creado por su identificador."
+      }
+    },
+    {
+      "name": "4. Aprobar pago",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 200 y el estado pasa a APROBADO\", () => {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.json().estado).to.eql(\"APROBADO\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/pagos/{{pagoId}}/estado",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos",
+            "{{pagoId}}",
+            "estado"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"estado\": \"APROBADO\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "Aprueba el pago pendiente."
+      }
+    },
+    {
+      "name": "5. Registrar otro pago para la misma factura (409)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 409 porque la factura ya tiene un pago aprobado\", () => {",
+              "    pm.response.to.have.status(409);",
+              "    pm.expect(pm.response.json().error).to.include(\"ya tiene un pago aprobado.\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/pagos",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"facturaId\": {{facturaPruebaId}},\n  \"monto\": 58000.00,\n  \"metodo\": \"EFECTIVO\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "Intenta registrar un segundo pago para una factura que ya tiene un pago APROBADO."
+      }
+    },
+    {
+      "name": "6. Eliminar el pago aprobado (409)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 409 porque un pago aprobado no se puede eliminar\", () => {",
+              "    pm.response.to.have.status(409);",
+              "    pm.expect(pm.response.json().error).to.eql(\"Un pago aprobado no se puede eliminar.\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{base}}/api/pagos/{{pagoId}}",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos",
+            "{{pagoId}}"
+          ]
+        },
+        "description": "Intenta eliminar un pago en estado APROBADO."
+      }
+    },
+    {
+      "name": "7. Registrar pago sin monto (400)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 400 con el campo monto en campos\", () => {",
+              "    pm.response.to.have.status(400);",
+              "    const j = pm.response.json();",
+              "    pm.expect(j.error).to.eql(\"La petición tiene campos inválidos\");",
+              "    pm.expect(j.campos.monto).to.eql(\"El monto es obligatorio\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/pagos",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"facturaId\": {{facturaPruebaId}},\n  \"metodo\": \"EFECTIVO\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "Omite el campo obligatorio monto y recibe 400."
+      }
+    },
+    {
+      "name": "8. Registrar pago sin token (401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 401 cuando no se envía token\", () => {",
+              "    pm.response.to.have.status(401);",
+              "    pm.expect(pm.response.json().error).to.eql(\"Debe iniciar sesión con un token válido.\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/pagos",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"facturaId\": {{facturaRechazoId}},\n  \"monto\": 32000.00,\n  \"metodo\": \"TRANSFERENCIA\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "Envía la petición sin cabecera Authorization y recibe 401."
+      }
+    },
+    {
+      "name": "9. Registrar pago con tokenPagosConsulta (403)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 403 porque el token solo tiene el scope pagos:leer\", () => {",
+              "    pm.response.to.have.status(403);",
+              "    pm.expect(pm.response.json().error).to.eql(\"No tiene permisos para realizar esta operación.\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/pagos",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"facturaId\": {{facturaRechazoId}},\n  \"monto\": 32000.00,\n  \"metodo\": \"TRANSFERENCIA\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{tokenPagosConsulta}}",
+              "type": "string"
+            }
+          ]
+        },
+        "description": "Demuestra el control por scopes: el cliente pagos-consulta no tiene pagos:escribir y recibe 403."
+      }
+    },
+    {
+      "name": "10. Listar pagos con tokenAdministrador del login (401)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 401 porque la ruta de pagos solo acepta tokens emitidos por Keycloak\", () => {",
+              "    pm.response.to.have.status(401);",
+              "    pm.expect(pm.response.json().error).to.eql(\"Debe iniciar sesión con un token válido.\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base}}/api/pagos",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos"
+          ]
+        },
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{tokenAdministrador}}",
+              "type": "string"
+            }
+          ]
+        },
+        "description": "Prueba cruzada de emisores: un token de usuarios-service es rechazado con 401 en /api/pagos."
+      }
+    },
+    {
+      "name": "11a. Registrar pago para rechazar y eliminar (201)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 201\", () => {",
+              "    pm.response.to.have.status(201);",
+              "    pm.expect(pm.response.json().estado).to.eql(\"PENDIENTE\");",
+              "});",
+              "pm.collectionVariables.set(\"pagoRechazadoId\", pm.response.json().id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/pagos",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"facturaId\": {{facturaRechazoId}},\n  \"monto\": 32000.00,\n  \"metodo\": \"TRANSFERENCIA\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "Registra un pago de otra factura para probar el rechazo y posterior eliminación."
+      }
+    },
+    {
+      "name": "11b. Rechazar pago (200)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 200 y el estado pasa a RECHAZADO\", () => {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.json().estado).to.eql(\"RECHAZADO\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{base}}/api/pagos/{{pagoRechazadoId}}/estado",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos",
+            "{{pagoRechazadoId}}",
+            "estado"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"estado\": \"RECHAZADO\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "description": "Cambia el estado del pago pendiente a RECHAZADO."
+      }
+    },
+    {
+      "name": "11c. Eliminar pago rechazado (204)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Responde 204 al eliminar un pago no aprobado\", () => {",
+              "    pm.response.to.have.status(204);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "{{base}}/api/pagos/{{pagoRechazadoId}}",
+          "host": [
+            "{{base}}"
+          ],
+          "path": [
+            "api",
+            "pagos",
+            "{{pagoRechazadoId}}"
+          ]
+        },
+        "description": "Elimina el pago rechazado."
+      }
+    }
+  ]
+}
