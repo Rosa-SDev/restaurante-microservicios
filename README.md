@@ -140,57 +140,46 @@ carta-service/
 
 ## 2. Cómo ejecutarlo desde un clon limpio
 
-Hay tres formas de levantar el sistema. En las tres, la aplicación se consume
-siempre a través del gateway.
+Hay tres formas de levantar el sistema. En las tres, la API se consume siempre a
+través del gateway, y Keycloak responde en el mismo puerto 30180.
 
-| Modo | Base de datos | Dirección base |
+| Modo | Base de datos | Gateway | Keycloak |
+|---|---|---|---|
+| Local | H2 en memoria | `http://localhost:8080` | `http://localhost:30180` (contenedor de Compose) |
+| Docker Compose | MySQL en contenedor | `http://localhost:8080` | `http://localhost:30180` |
+| Kubernetes | MySQL con volumen persistente | `http://localhost:30080` | `http://localhost:30180` |
+
+Los tres modos necesitan antes las claves RSA y el archivo `.env`.
+
+### 2.1 Generar las claves RSA (una sola vez)
+
+`usuarios-service` firma el token con una clave privada y el gateway lo verifica
+con la pública. Ese par **no está en el repositorio**: cada quien genera el suyo
+en su equipo. En **Git Bash** (trae OpenSSL), desde la raíz del repositorio:
+
+```bash
+bash scripts/generar-claves-rsa.sh
+```
+
+El script crea la carpeta `claves/` con dos archivos:
+
+| Archivo | Formato | Lo usa |
 |---|---|---|
-| Local | H2 en memoria | `http://localhost:8080` |
-| Docker Compose | MySQL en contenedor | `http://localhost:8080` |
-| Kubernetes | MySQL con volumen persistente | `http://localhost:30080` |
+| `claves/privada.pem` | PKCS#8, RSA de 2048 bits | Solo `usuarios-service` |
+| `claves/publica.pem` | X.509 | `usuarios-service` y `api-gateway` |
 
-### 2.1 Local (IntelliJ o el wrapper de Maven)
+`claves/` está en el `.gitignore` y en el `.dockerignore`: nunca se sube ni entra
+a una imagen. Si las claves ya existen, el script no las sobrescribe, porque un par
+nuevo invalida todos los tokens emitidos. Para regenerarlas hay que borrar la
+carpeta a mano.
 
-Requisitos: **JDK 21**. No hace falta instalar Maven, el repositorio trae el
-wrapper. Este modo usa el perfil por omisión, que levanta una base **H2 en
-memoria**: no requiere Docker ni MySQL y los datos se pierden al apagar.
+Las pruebas no dependen de esta carpeta: generan su propio par en memoria, así
+que `./mvnw clean install` pasa también en un clon sin claves.
 
-Compilar los cinco módulos desde la raíz:
+### 2.2 Crear el archivo `.env`
 
-```bash
-./mvnw clean install
-```
-
-En Windows:
-
-```powershell
-.\mvnw.cmd clean install
-```
-
-Cada servicio se ejecuta por separado, en su propia terminal:
-
-```bash
-./mvnw spring-boot:run -pl usuarios-service
-./mvnw spring-boot:run -pl carta-service
-./mvnw spring-boot:run -pl clientes-service
-./mvnw spring-boot:run -pl salon-service
-./mvnw spring-boot:run -pl api-gateway
-```
-
-Para probar el sistema completo hay que levantar los cinco. Desde IntelliJ IDEA
-es equivalente: abrir el `pom.xml` de la raíz para que importe los cinco módulos
-y ejecutar la clase `main` de cada uno sin indicar ningún perfil.
-
-Cada servicio expone además la consola de H2 en su propio puerto, por ejemplo
-`http://localhost:8082/h2-console` para la carta.
-
-### 2.2 Docker Compose
-
-Requisitos: **Docker Desktop** en marcha. No hace falta JDK: las imágenes se
-compilan dentro de Docker.
-
-Primero, copiar el archivo de variables de ejemplo y poner valores propios en la
-copia. `.env` no se sube al repositorio.
+Copiar el archivo de ejemplo y poner valores propios en la copia. `.env` no se
+sube al repositorio.
 
 ```bash
 cp .env.example .env
@@ -202,17 +191,88 @@ En Windows:
 Copy-Item .env.example .env
 ```
 
-Construir las imágenes y levantar los seis contenedores:
+Además de las contraseñas de MySQL, el `.env` lleva la del administrador de
+Keycloak y los secretos de los dos clientes OAuth (`PAGOS_CLIENTE_SECRET` y
+`PAGOS_CONSULTA_SECRET`, de al menos 32 caracteres). Para generar valores
+aleatorios en Git Bash:
+
+```bash
+openssl rand -hex 24
+```
+
+### 2.3 Local (IntelliJ o el wrapper de Maven)
+
+Requisitos: **JDK 21**, y Docker Desktop solo para Keycloak. No hace falta
+instalar Maven, el repositorio trae el wrapper. Este modo usa el perfil por
+omisión, que levanta una base **H2 en memoria** en cada servicio: no requiere
+MySQL y los datos se pierden al apagar.
+
+Compilar los seis módulos desde la raíz:
+
+```bash
+./mvnw clean install
+```
+
+En Windows:
+
+```powershell
+.\mvnw.cmd clean install
+```
+
+Levantar solo Keycloak, que lee los secretos del `.env`:
+
+```bash
+docker compose up -d keycloak
+```
+
+Cada servicio se ejecuta por separado, en su propia terminal:
+
+```bash
+./mvnw spring-boot:run -pl usuarios-service
+./mvnw spring-boot:run -pl carta-service
+./mvnw spring-boot:run -pl clientes-service
+./mvnw spring-boot:run -pl salon-service
+./mvnw spring-boot:run -pl pagos-service
+./mvnw spring-boot:run -pl api-gateway
+```
+
+En este modo, `usuarios-service` y el gateway leen las claves de
+`../claves/privada.pem` y `../claves/publica.pem`, una ruta relativa a la carpeta
+de cada módulo. Desde IntelliJ IDEA es equivalente: abrir el `pom.xml` de la raíz
+para que importe los seis módulos y ejecutar la clase `main` de cada uno sin
+indicar ningún perfil, con la carpeta del módulo como directorio de trabajo.
+
+Cada servicio expone además la consola de H2 en su propio puerto, por ejemplo
+`http://localhost:8082/h2-console` para la carta.
+
+### 2.4 Docker Compose
+
+Requisitos: **Docker Desktop** en marcha. No hace falta JDK: las imágenes se
+compilan dentro de Docker.
+
+Con las claves y el `.env` listos, construir las imágenes y levantar los ocho
+contenedores (MySQL, Keycloak, los cinco servicios y el gateway):
 
 ```bash
 docker compose up --build
 ```
 
 La primera vez tarda varios minutos, porque cada imagen descarga sus
-dependencias de Maven. El gateway queda escuchando en:
+dependencias de Maven. Quedan publicados dos puertos:
 
 ```
-http://localhost:8080
+http://localhost:8080     gateway
+http://localhost:30180    Keycloak
+```
+
+Las claves no se copian a las imágenes: Compose monta `./claves` como volumen de
+solo lectura en `usuarios-service`, y únicamente `publica.pem` en el gateway.
+Keycloak importa el realm desde `./keycloak` cada vez que arranca.
+
+Para comprobar que Keycloak ya cargó el realm, abrir en el navegador:
+
+```
+http://localhost:30180/realms/restaurante/.well-known/openid-configuration
 ```
 
 Comprobar el estado y leer los registros de un servicio:
@@ -229,35 +289,42 @@ próximo arranque parta de bases vacías:
 docker compose down -v
 ```
 
-Sin `-v`, los datos sobreviven al apagado.
+Sin `-v`, los datos de MySQL sobreviven al apagado. Keycloak no guarda nada: cada
+arranque vuelve a dejar el mismo realm.
 
-### 2.3 Kubernetes en Docker Desktop
+### 2.5 Kubernetes en Docker Desktop
 
 Requisitos: Docker Desktop con Kubernetes activado (*Settings → Kubernetes →
-Enable Kubernetes*) y el archivo `.env` ya creado como en el paso anterior.
+Enable Kubernetes*), y las claves y el `.env` ya creados como en los pasos 2.1
+y 2.2.
 
-**Paso 1: construir las cinco imágenes en el equipo.** Los manifiestos usan
+**Paso 1: construir las seis imágenes en el equipo.** Los manifiestos usan
 `imagePullPolicy: Never`, es decir, Kubernetes no intenta descargar nada de
 Internet y solo usa las imágenes locales. Si no existen, los Pods se quedan en
-`ErrImageNeverPull`.
+`ErrImageNeverPull`. La imagen de Keycloak sí se descarga, porque es la oficial.
 
 ```bash
 docker compose build
-docker images restaurante/*
 ```
 
-El segundo comando debe listar las cinco imágenes con la etiqueta `1.0`.
-
-**Paso 2: crear el namespace, el Secret y el ConfigMap.** Las contraseñas no
-están escritas en los manifiestos: el Secret se genera por comando a partir del
-mismo `.env` que usa Compose, y el ConfigMap a partir del script que crea las
-cuatro bases de datos.
+**Paso 2: crear el namespace, los dos Secrets y los dos ConfigMaps.** Ningún
+secreto está escrito en los manifiestos: todo se genera por comando a partir de
+archivos locales que no se suben.
 
 ```bash
 kubectl apply -f k8s/00-namespace.yaml
 kubectl create secret generic restaurante-secretos --from-env-file=.env -n restaurante
+kubectl create secret generic restaurante-claves --from-file=claves/ -n restaurante
 kubectl create configmap mysql-inicializacion --from-file=docker/mysql/ -n restaurante
+kubectl create configmap keycloak-realm --from-file=keycloak/restaurante-realm.json -n restaurante
 ```
+
+| Recurso | Sale de | Para qué |
+|---|---|---|
+| Secret `restaurante-secretos` | `.env` | Contraseñas de MySQL, del administrador de Keycloak y secretos de los clientes OAuth |
+| Secret `restaurante-claves` | `claves/` | Par RSA, montado en `/claves`; el gateway monta solo `publica.pem` |
+| ConfigMap `mysql-inicializacion` | `docker/mysql/` | Script que crea las cinco bases y sus usuarios |
+| ConfigMap `keycloak-realm` | `keycloak/restaurante-realm.json` | Realm que Keycloak importa al arrancar |
 
 **Paso 3: desplegar todo y esperar a que los Pods estén listos.**
 
@@ -266,26 +333,32 @@ kubectl apply -f k8s/
 kubectl get pods -n restaurante -w
 ```
 
-Se esperan seis Pods en `1/1 Running`. El gateway se publica con un Service de
-tipo NodePort `8080:30080`, así que la dirección base es:
+Es normal que algunos servicios se reinicien una o dos veces al arrancar,
+mientras MySQL termina de levantarse: Kubernetes los recupera solo. El estado
+final es de **ocho Pods en `1/1 Running`**.
+
+Dos Services son de tipo NodePort, así que las direcciones base son:
 
 ```
-http://localhost:30080
+http://localhost:30080    gateway   (NodePort 8080:30080)
+http://localhost:30180    Keycloak  (NodePort 8080:30180)
 ```
 
-Los otros cinco Services son `ClusterIP` y solo se alcanzan desde dentro del
-clúster:
+Los demás Services son `ClusterIP` y solo se alcanzan desde dentro del clúster:
 
 ```bash
 kubectl get svc -n restaurante
 ```
 
 **Paso 4: liberar los recursos.** Borrar el namespace elimina de una vez los
-Deployments, los Services, el Secret, el ConfigMap y el volumen de MySQL:
+Deployments, los Services, los Secrets, los ConfigMaps y el volumen de MySQL:
 
 ```bash
 kubectl delete namespace restaurante
 ```
+
+Si se cambia el `.env` o se regeneran las claves, hay que borrar el namespace y
+repetir desde el paso 2, porque los Secrets se crean a partir de esos archivos.
 
 ---
 
