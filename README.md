@@ -364,11 +364,16 @@ repetir desde el paso 2, porque los Secrets se crean a partir de esos archivos.
 
 ## 3. Seguridad
 
-La autenticación es con **JSON Web Token**. `usuarios-service` emite el token al
-iniciar sesión, y el `api-gateway` lo valida y aplica los permisos antes de
-reenviar la petición.
+La API usa dos mecanismos, cada uno en su parte del sistema:
 
-### Obtener el token
+- **JWT firmado con RSA** para la operación diaria del restaurante:
+  `usuarios-service` emite el token al iniciar sesión y el gateway lo verifica.
+- **OAuth 2.0 con Keycloak** para los pagos: Keycloak emite el *access token*, y
+  lo verifican el gateway y también `pagos-service`.
+
+### JWT con RSA (token de sesión)
+
+#### Obtener el token
 
 El inicio de sesión es la única operación pública:
 
@@ -382,7 +387,7 @@ Respuesta:
 
 ```json
 {
-  "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "token": "eyJ...",
   "tipo": "Bearer",
   "expiraEn": 3600,
   "usuario": {
@@ -395,8 +400,8 @@ Respuesta:
 }
 ```
 
-El token se firma con **HS256**, dura **3600 segundos** y lleva el rol del
-usuario. A partir de ahí, todas las demás peticiones viajan con el encabezado:
+A partir de ahí, todas las demás peticiones (salvo las de pagos) viajan con el
+encabezado:
 
 ```
 Authorization: Bearer <token>
@@ -409,32 +414,187 @@ curl http://localhost:8080/api/platillos \
   -H "Authorization: Bearer <token>"
 ```
 
+#### Qué lleva el token
+
+| Elemento | Valor |
+|---|---|
+| Algoritmo | **RS256** (firma RSA sobre un resumen SHA-256), clave de 2048 bits |
+| Encabezado | `alg: RS256` y `kid: restaurante-usuarios-1`, el identificador de la clave |
+| `iss` | `usuarios-service` |
+| `sub` | El correo del usuario |
+| `uid` | El `id` del usuario |
+| `rol` | `ADMINISTRADOR`, `MESERO`, `COCINERO` o `CAJERO` |
+| `iat` / `exp` | Emisión y vencimiento: dura **3600 segundos** |
+
+El gateway comprueba la firma con `publica.pem`, el vencimiento y que el emisor
+sea `usuarios-service`. Si falla cualquiera de las tres, responde **401**.
+
+#### Qué clave tiene cada servicio y por qué
+
+| Archivo | `usuarios-service` | `api-gateway` | Repositorio |
+|---|---|---|---|
+| `privada.pem` | Sí: firma los tokens | No | **Nunca** |
+| `publica.pem` | Sí: la necesita para armar la clave RSA completa con la que firma | Sí: verifica la firma | No: se genera junto con la privada |
+
+Con RSA solo quien tiene la clave privada puede fabricar tokens, y esa clave vive
+únicamente en `usuarios-service`. La pública solo sirve para comprobar firmas, así
+que entregársela al gateway no le da ningún poder de emitir tokens. Por eso se
+reemplazó la firma HS256 del avance anterior: con una clave compartida, todo el
+que podía verificar un token también podía fabricarlo.
+
 Las contraseñas no se guardan en claro: se almacenan con **BCrypt**, que genera
 una sal distinta para cada una.
+
+### OAuth 2.0 con Keycloak (pagos)
+
+#### El realm
+
+| Elemento | Valor |
+|---|---|
+| Realm | `restaurante` |
+| Emisor (`iss`) | `http://localhost:30180/realms/restaurante` |
+| *Endpoint* de token | `http://localhost:30180/realms/restaurante/protocol/openid-connect/token` |
+| *Endpoint* de autorización | `http://localhost:30180/realms/restaurante/protocol/openid-connect/auth` |
+| JWKS (claves públicas) | `http://localhost:30180/realms/restaurante/protocol/openid-connect/certs` |
+| Vida del *access token* | 900 segundos (15 minutos) |
+
+#### Scopes y audiencia
+
+| *Client scope* | Qué hace |
+|---|---|
+| `pagos:leer` | Aparece en el claim `scope` y permite consultar pagos |
+| `pagos:escribir` | Aparece en el claim `scope` y permite registrar, cambiar de estado y eliminar pagos |
+| `pagos-api-audiencia` | Agrega `pagos-api` al claim `aud`, la audiencia que exigen el gateway y `pagos-service` |
+
+#### Los tres clientes
+
+| Client ID | Tipo | Flujo | Scopes que recibe | Para qué |
+|---|---|---|---|---|
+| `pagos-cliente` | Confidencial, con secreto | `client_credentials` | `pagos:leer` y `pagos:escribir` | La caja como sistema: puede todo |
+| `pagos-consulta` | Confidencial, con secreto | `client_credentials` | Solo `pagos:leer` | Un sistema de solo consulta; demuestra el **403** |
+| `restaurante-postman` | Público, PKCE `S256` | *Authorization Code* | `pagos:leer` por defecto; `pagos:escribir` si se pide | Demostración con un usuario real |
+
+Los tres reciben la audiencia `pagos-api`. En ninguno están habilitados el flujo
+*password* ni el *implicit*.
+
+#### Los dos flujos
+
+**`client_credentials`, de máquina a máquina.** No hay usuario: el cliente se
+identifica con su `client_id` y su `client_secret` y recibe un token.
+
+```bash
+curl -X POST http://localhost:30180/realms/restaurante/protocol/openid-connect/token \
+  -d grant_type=client_credentials \
+  -d client_id=pagos-cliente \
+  -d client_secret=<PAGOS_CLIENTE_SECRET de tu .env>
+```
+
+La respuesta trae el `access_token`, que dura 900 segundos y se usa igual que el
+token de sesión:
+
+```bash
+curl http://localhost:8080/api/pagos \
+  -H "Authorization: Bearer <access_token>"
+```
+
+Lo que importa del *access token* de `pagos-cliente`:
+
+```json
+{
+  "iss": "http://localhost:30180/realms/restaurante",
+  "aud": "pagos-api",
+  "azp": "pagos-cliente",
+  "scope": "pagos:leer pagos:escribir profile email",
+  "preferred_username": "service-account-pagos-cliente"
+}
+```
+
+**_Authorization Code_ con PKCE, con usuario.** El usuario inicia sesión en la
+página de Keycloak, no en la aplicación, así que la aplicación nunca ve su
+contraseña. El cliente genera un `code_verifier` aleatorio y envía su resumen
+(`code_challenge`); Keycloak devuelve un código de un solo uso que solo se puede
+cambiar por un token presentando el `code_verifier` original. Así, un cliente
+público, sin secreto, usa el flujo de forma segura. Se ejecuta desde Postman, como
+se explica en la [sección 6](#6-colecciones-de-postman).
+
+#### Por qué hay dos direcciones de Keycloak
+
+El claim `iss` del token es la dirección **pública** de Keycloak,
+`http://localhost:30180/realms/restaurante`, porque por ahí se piden los tokens.
+Dentro de Docker o del clúster, en cambio, el gateway y `pagos-service` llegan a
+Keycloak por `http://keycloak:8080`. Por eso:
+
+- `KC_HOSTNAME` obliga a Keycloak a escribir siempre el mismo emisor, sin importar
+  por qué dirección le llegue la petición.
+- Los servicios **comparan** el `iss` con la dirección pública
+  (`OAUTH_ISSUER_URI`), pero **descargan** las claves por la interna
+  (`OAUTH_JWKS_URI`).
+- El puerto 30180 es el mismo en Compose y en Kubernetes, así que el emisor es
+  idéntico en los dos entornos.
+
+El JWKS se descarga una vez y queda en memoria: el gateway y `pagos-service`
+verifican cada token sin volver a llamar a Keycloak. Si Keycloak se cae, los
+tokens ya emitidos siguen siendo válidos hasta que vencen.
+
+Los secretos de los clientes no están en el archivo del realm: el JSON dice
+`${PAGOS_CLIENTE_SECRET}` y `${PAGOS_CONSULTA_SECRET}`, y Keycloak los reemplaza
+al importar con las variables de entorno que vienen del `.env` o del Secret de
+Kubernetes. Keycloak corre en modo `start-dev` (HTTP, sin base de datos externa);
+en producción se usaría el modo `start` con TLS, una base de datos propia y un
+dominio real.
+
+### Las dos cadenas del gateway
+
+El gateway tiene dos cadenas de seguridad de Spring Security, y cada una confía en
+un solo emisor:
+
+| | Cadena 1: `/api/pagos/**` | Cadena 2: todo lo demás |
+|---|---|---|
+| Orden | `@Order(1)` con `securityMatcher("/api/pagos/**")`: se evalúa primero | `@Order(2)`: atiende lo que la primera no tomó |
+| Token aceptado | De Keycloak | De `usuarios-service` |
+| Verifica la firma con | El JWKS de Keycloak | `claves/publica.pem` |
+| Emisor esperado | `http://localhost:30180/realms/restaurante` | `usuarios-service` |
+| Además exige | Audiencia `pagos-api` y el scope según el verbo | El rol según la matriz de permisos |
+
+Qué pasa si se usa el token equivocado:
+
+| Token | Petición | Resultado | Por qué |
+|---|---|---|---|
+| Del login (administrador) | `GET /api/pagos` | **401** | La firma no corresponde a ninguna clave de Keycloak |
+| De `pagos-cliente` | `GET /api/platillos` | **401** | La firma no corresponde a `publica.pem` |
+| De `pagos-consulta` | `POST /api/pagos` | **403** | El token es válido, pero le falta el scope `pagos:escribir` |
+| De `pagos-cliente` | `POST /api/pagos` | **201** | Todo correcto |
 
 ### Matriz de permisos
 
 La aplica el gateway, y gana la primera regla que coincide con la petición.
+`pagos-service` repite las reglas de pagos por su cuenta.
 
-| Operación | Quién puede | Por qué |
-|---|---|---|
-| `POST /api/auth/login` | **Público** | Es la puerta de entrada |
-| `/api/usuarios/**` (los cinco verbos) | **ADMINISTRADOR** | Gestión del personal |
-| `DELETE /api/pedidos/{id}/platillos/{lineaId}` | **Cualquier rol autenticado** | Quitar un platillo del pedido es trabajo diario del mesero |
-| Cualquier otro `DELETE` (platillos, mesas, clientes, reservas, anular factura) | **ADMINISTRADOR** | Borran datos maestros o revierten un cobro |
-| Todo lo demás (GET, POST, PUT) | **Cualquier rol autenticado** | Operación diaria del restaurante |
+| Operación | Token aceptado | Quién puede | Por qué |
+|---|---|---|---|
+| `POST /api/auth/login` | Ninguno | **Público** | Es la puerta de entrada |
+| `/api/usuarios/**` (los cinco verbos) | De `usuarios-service` | **ADMINISTRADOR** | Gestión del personal |
+| `DELETE /api/pedidos/{id}/platillos/{lineaId}` | De `usuarios-service` | **Cualquier rol autenticado** | Quitar un platillo del pedido es trabajo diario del mesero |
+| Cualquier otro `DELETE` fuera de pagos (platillos, mesas, clientes, reservas, anular factura) | De `usuarios-service` | **ADMINISTRADOR** | Borran datos maestros o revierten un cobro |
+| Todo lo demás fuera de pagos (GET, POST, PUT) | De `usuarios-service` | **Cualquier rol autenticado** | Operación diaria del restaurante |
+| `GET /api/pagos/**` | De Keycloak | Scope **`pagos:leer`** | Consultar pagos |
+| `POST`, `PUT` y `DELETE` en `/api/pagos/**` | De Keycloak | Scope **`pagos:escribir`** | Registrar, aprobar, rechazar o eliminar pagos mueve dinero |
 
-### Respuestas de error del gateway
+### Respuestas de error
+
+El gateway y `pagos-service` responden con el mismo cuerpo:
 
 | Situación | Código | Cuerpo |
 |---|---|---|
-| Sin token, token vencido o firma inválida | **401** | `{"error": "Debe iniciar sesión con un token válido."}` |
-| Token válido, rol sin permiso | **403** | `{"error": "No tiene permisos para realizar esta operación."}` |
+| Sin token, token vencido, firma inválida, emisor o audiencia incorrectos | **401** | `{"error": "Debe iniciar sesión con un token válido."}` |
+| Token válido, pero sin el rol o el scope necesario | **403** | `{"error": "No tiene permisos para realizar esta operación."}` |
 
 ### Usuarios de demostración
 
-`usuarios-service` los crea al arrancar con la base vacía. Son datos de prueba
-para la demostración y no corresponden a ninguna cuenta real.
+Son datos de prueba para la demostración y no corresponden a ninguna cuenta real.
+
+`usuarios-service` crea estos usuarios al arrancar con la base vacía, y sirven
+para `POST /api/auth/login`:
 
 | Correo | Clave | Rol |
 |---|---|---|
@@ -443,20 +603,29 @@ para la demostración y no corresponden a ninguna cuenta real.
 | `cocinero@restaurante.com` | `cocinero123` | COCINERO |
 | `cajero@restaurante.com` | `cajero123` | CAJERO |
 
+El realm de Keycloak trae su propio usuario, para iniciar sesión en la página de
+Keycloak durante el flujo con PKCE:
+
+| Usuario | Clave | Para qué |
+|---|---|---|
+| `cajero@restaurante.com` | `cajero123` | Obtener un *access token* de pagos en nombre de un usuario |
+
+Es un usuario **de Keycloak**, independiente del cajero de `usuarios-service`. Usa
+la misma clave a propósito, para no tener que recordar dos.
+
 ### El límite de confianza
 
-El gateway es la única puerta: **solo él publica un puerto**. Los cuatro
-servicios de negocio y MySQL no son alcanzables desde fuera, porque en Compose
-no declaran `ports:` y en Kubernetes son `ClusterIP`.
+El gateway es la única puerta de la API: **solo él y Keycloak publican un
+puerto**. Los cinco servicios de negocio y MySQL no son alcanzables desde fuera,
+porque en Compose no declaran `ports:` y en Kubernetes son `ClusterIP`.
 
-Por eso los servicios de negocio no validan el token: confían en que solo les
-llega tráfico que ya pasó por el gateway. Un proceso dentro de la misma red
-interna sí podría llamarlos directamente, y ese es el límite reconocido del
-modelo.
+Los cuatro servicios originales no validan el token: confían en que solo les llega
+tráfico que ya pasó por el gateway. Un proceso dentro de la misma red interna sí
+podría llamarlos directamente, y ese es el límite reconocido del modelo.
 
-La clave de firma del entorno local está escrita en el repositorio a propósito,
-solo sirve en el equipo de desarrollo. En Docker y en Kubernetes se usa la del
-archivo `.env`, que nunca se sube.
+`pagos-service` es la excepción: como maneja dinero, valida por su cuenta la
+firma, el vencimiento, el emisor, la audiencia y los scopes del token de Keycloak.
+Aunque alguien lo alcanzara por la red interna, sin un token válido no responde.
 
 ---
 
