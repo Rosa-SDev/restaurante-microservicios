@@ -30,6 +30,14 @@ spring:
               predicates:
                 - Path=/api/mesas/**,/api/pedidos/**,/api/facturas/**
 
+            - id: pagos
+              uri: http://localhost:8085
+              predicates:
+                - Path=/api/pagos/**
+
 seguridad:
   jwt:
-    secreto: clave-de-desarrollo-local-no-usar-en-docker-2026
+    clave-publica: file:../claves/publica.pem
+  oauth2:
+    emisor: http://localhost:30180/realms/restaurante
+    jwks: http://localhost:30180/realms/restaurante/protocol/openid-connect/certs

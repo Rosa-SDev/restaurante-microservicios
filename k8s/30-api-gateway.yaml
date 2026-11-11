@@ -27,11 +27,16 @@ spec:
               value: America/Bogota
             - name: JAVA_TOOL_OPTIONS
               value: -XX:MaxRAMPercentage=75
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: restaurante-secretos
-                  key: JWT_SECRET
+            - name: JWT_CLAVE_PUBLICA
+              value: file:/claves/publica.pem
+            - name: OAUTH_ISSUER_URI
+              value: http://localhost:30180/realms/restaurante
+            - name: OAUTH_JWKS_URI
+              value: http://keycloak:8080/realms/restaurante/protocol/openid-connect/certs
+          volumeMounts:
+            - name: claves
+              mountPath: /claves
+              readOnly: true
           resources:
             limits:
               memory: 384Mi
@@ -40,6 +45,13 @@ spec:
               port: 8080
             initialDelaySeconds: 20
             periodSeconds: 10
+      volumes:
+        - name: claves
+          secret:
+            secretName: restaurante-claves
+            items:
+              - key: publica.pem
+                path: publica.pem
 ---
 apiVersion: v1
 kind: Service

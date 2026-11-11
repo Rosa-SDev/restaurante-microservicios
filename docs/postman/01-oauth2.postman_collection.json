@@ -1,0 +1,288 @@
+{
+  "info": {
+    "name": "Restaurante · OAuth 2.0",
+    "description": "Pide a Keycloak los tokens de OAuth 2.0 con los que se prueba pagos-service a través del api-gateway. Ejecútala después de “Restaurante · autenticación” y antes de la colección de pagos, con el environment “Restaurante” seleccionado: cada token queda guardado en ese environment y la colección de pagos lo usa sin copiarlo a mano. Sin environment, los tokens quedan solo en las variables de esta colección.\n\n## Variables del environment\n\n- keycloak: dirección de Keycloak, http://localhost:30180. La colección trae ese valor por defecto.\n- pagosClienteSecret: el secreto del cliente pagos-cliente, igual al PAGOS_CLIENTE_SECRET de tu archivo .env.\n- pagosConsultaSecret: el secreto del cliente pagos-consulta, igual al PAGOS_CONSULTA_SECRET de tu archivo .env.\n\nLos dos secretos se escriben solo en tu environment local, nunca en esta colección ni en un environment que se suba al repositorio.\n\n## Qué hace cada petición\n\n1. Configuración OpenID del realm: comprueba que Keycloak responde y que el emisor es {{keycloak}}/realms/restaurante.\n2. Token · pagos-cliente: client_credentials con el cliente que puede leer y escribir pagos. Guarda el token en tokenPagos.\n3. Token · pagos-consulta: client_credentials con el cliente de solo consulta. Guarda el token en tokenPagosConsulta; sirve para demostrar el 403 al intentar escribir.\n4. Token · secreto incorrecto: el mismo cliente pagos-cliente con un secreto inventado; Keycloak lo rechaza con 401.\n\n## Authorization Code con PKCE (manual)\n\nEste flujo pide un token en nombre de un usuario y se hace a mano desde Postman:\n\n1. Abre una petición de pagos y ve a la pestaña Authorization.\n2. Type: OAuth 2.0.\n3. Grant type: Authorization Code (With PKCE).\n4. Callback URL: https://oauth.pstmn.io/v1/callback, con la casilla Authorize using browser marcada.\n5. Auth URL: {{keycloak}}/realms/restaurante/protocol/openid-connect/auth\n6. Access Token URL: {{keycloak}}/realms/restaurante/protocol/openid-connect/token\n7. Client ID: restaurante-postman (cliente público, sin secreto).\n8. Code Challenge Method: SHA-256.\n9. Scope: openid pagos:escribir\n10. Pulsa Get New Access Token: se abre el navegador con el inicio de sesión de Keycloak.\n11. Entra con el usuario de demostración cajero@restaurante.com / cajero123.\n12. De vuelta en Postman, pulsa Use Token y envía la petición.\n\nSi quitas pagos:escribir del campo Scope, el token solo trae pagos:leer, que es el scope por defecto, y un POST de pagos responde 403.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "keycloak",
+      "value": "http://localhost:30180"
+    },
+    {
+      "key": "tokenPagos",
+      "value": ""
+    },
+    {
+      "key": "tokenPagosConsulta",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Configuración OpenID del realm",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"200 con el emisor del realm restaurante\", () => {",
+              "    pm.response.to.have.status(200);",
+              "    const j = pm.response.json();",
+              "    pm.expect(j.issuer).to.eql(pm.variables.replaceIn(\"{{keycloak}}/realms/restaurante\"));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "host": [
+            "{{keycloak}}"
+          ],
+          "path": [
+            "realms",
+            "restaurante",
+            ".well-known",
+            "openid-configuration"
+          ],
+          "raw": "{{keycloak}}/realms/restaurante/.well-known/openid-configuration"
+        },
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "Documento de descubrimiento de OpenID Connect del realm restaurante: emisor, endpoints de autorización y de token, y JWKS."
+      }
+    },
+    {
+      "name": "Token · pagos-cliente",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const payload = (jwt) => {",
+              "    const b64 = jwt.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\");",
+              "    const relleno = b64 + \"=\".repeat((4 - b64.length % 4) % 4);",
+              "    return JSON.parse(CryptoJS.enc.Base64.parse(relleno).toString(CryptoJS.enc.Utf8));",
+              "};",
+              "pm.test(\"200 con access_token Bearer\", () => {",
+              "    pm.response.to.have.status(200);",
+              "    const j = pm.response.json();",
+              "    pm.expect(j.access_token).to.be.a(\"string\").and.not.empty;",
+              "    pm.expect(j.token_type).to.match(/^bearer$/i);",
+              "});",
+              "pm.test(\"aud contiene pagos-api y scope trae pagos:leer y pagos:escribir\", () => {",
+              "    const p = payload(pm.response.json().access_token);",
+              "    pm.expect([].concat(p.aud)).to.include(\"pagos-api\");",
+              "    const scopes = (p.scope || \"\").split(\" \");",
+              "    pm.expect(scopes).to.include(\"pagos:leer\");",
+              "    pm.expect(scopes).to.include(\"pagos:escribir\");",
+              "});",
+              "const token = pm.response.json().access_token;",
+              "pm.collectionVariables.set(\"tokenPagos\", token);",
+              "if (pm.environment.name) { pm.environment.set(\"tokenPagos\", token); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "host": [
+            "{{keycloak}}"
+          ],
+          "path": [
+            "realms",
+            "restaurante",
+            "protocol",
+            "openid-connect",
+            "token"
+          ],
+          "raw": "{{keycloak}}/realms/restaurante/protocol/openid-connect/token"
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "grant_type",
+              "value": "client_credentials",
+              "type": "text"
+            },
+            {
+              "key": "client_id",
+              "value": "pagos-cliente",
+              "type": "text"
+            },
+            {
+              "key": "client_secret",
+              "value": "{{pagosClienteSecret}}",
+              "type": "text"
+            }
+          ]
+        },
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "Token del cliente pagos-cliente, que puede leer y escribir pagos. Lo guarda en {{tokenPagos}}."
+      }
+    },
+    {
+      "name": "Token · pagos-consulta",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const payload = (jwt) => {",
+              "    const b64 = jwt.split(\".\")[1].replace(/-/g, \"+\").replace(/_/g, \"/\");",
+              "    const relleno = b64 + \"=\".repeat((4 - b64.length % 4) % 4);",
+              "    return JSON.parse(CryptoJS.enc.Base64.parse(relleno).toString(CryptoJS.enc.Utf8));",
+              "};",
+              "pm.test(\"200 con access_token Bearer\", () => {",
+              "    pm.response.to.have.status(200);",
+              "    const j = pm.response.json();",
+              "    pm.expect(j.access_token).to.be.a(\"string\").and.not.empty;",
+              "    pm.expect(j.token_type).to.match(/^bearer$/i);",
+              "});",
+              "pm.test(\"scope trae pagos:leer y no pagos:escribir\", () => {",
+              "    const p = payload(pm.response.json().access_token);",
+              "    pm.expect([].concat(p.aud)).to.include(\"pagos-api\");",
+              "    const scopes = (p.scope || \"\").split(\" \");",
+              "    pm.expect(scopes).to.include(\"pagos:leer\");",
+              "    pm.expect(scopes).to.not.include(\"pagos:escribir\");",
+              "});",
+              "const token = pm.response.json().access_token;",
+              "pm.collectionVariables.set(\"tokenPagosConsulta\", token);",
+              "if (pm.environment.name) { pm.environment.set(\"tokenPagosConsulta\", token); }"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "host": [
+            "{{keycloak}}"
+          ],
+          "path": [
+            "realms",
+            "restaurante",
+            "protocol",
+            "openid-connect",
+            "token"
+          ],
+          "raw": "{{keycloak}}/realms/restaurante/protocol/openid-connect/token"
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "grant_type",
+              "value": "client_credentials",
+              "type": "text"
+            },
+            {
+              "key": "client_id",
+              "value": "pagos-consulta",
+              "type": "text"
+            },
+            {
+              "key": "client_secret",
+              "value": "{{pagosConsultaSecret}}",
+              "type": "text"
+            }
+          ]
+        },
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "Token del cliente pagos-consulta, que solo puede leer pagos. Lo guarda en {{tokenPagosConsulta}}."
+      }
+    },
+    {
+      "name": "Token · secreto incorrecto",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"401 por credenciales de cliente inválidas\", () => {",
+              "    pm.response.to.have.status(401);",
+              "    const j = pm.response.json();",
+              "    pm.expect(j.error).to.be.oneOf([\"invalid_client\", \"unauthorized_client\"]);",
+              "});",
+              "pm.test(\"No se entrega ningún token\", () => {",
+              "    pm.expect(pm.response.json()).to.not.have.property(\"access_token\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "url": {
+          "host": [
+            "{{keycloak}}"
+          ],
+          "path": [
+            "realms",
+            "restaurante",
+            "protocol",
+            "openid-connect",
+            "token"
+          ],
+          "raw": "{{keycloak}}/realms/restaurante/protocol/openid-connect/token"
+        },
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "grant_type",
+              "value": "client_credentials",
+              "type": "text"
+            },
+            {
+              "key": "client_id",
+              "value": "pagos-cliente",
+              "type": "text"
+            },
+            {
+              "key": "client_secret",
+              "value": "secreto-incorrecto",
+              "type": "text"
+            }
+          ]
+        },
+        "auth": {
+          "type": "noauth"
+        },
+        "description": "El cliente pagos-cliente con un secreto inventado: Keycloak responde 401 y no entrega token."
+      }
+    }
+  ]
+}
