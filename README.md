@@ -2,8 +2,9 @@
 
 Sistema de Gestión de Restaurante expuesto como microservicios REST con Spring Boot.
 El proyecto es un repositorio Maven multimódulo: un `pom.xml` padre que coordina
-cinco aplicaciones Spring Boot independientes, cada una con su propio `main`, su
-propio puerto y su propia base de datos.
+seis aplicaciones Spring Boot independientes, cada una con su propio `main`, su
+propio puerto y su propia base de datos. La autorización de los pagos la resuelve
+**Keycloak**, un servidor OAuth 2.0 que corre con su imagen oficial.
 
 - [1. El sistema y su arquitectura](#1-el-sistema-y-su-arquitectura)
 - [2. Cómo ejecutarlo desde un clon limpio](#2-cómo-ejecutarlo-desde-un-clon-limpio)
@@ -17,51 +18,71 @@ propio puerto y su propia base de datos.
 
 ## 1. El sistema y su arquitectura
 
-Cuatro microservicios de negocio, un gateway que es la única puerta de entrada y
-un MySQL con una base de datos por servicio.
+Cinco microservicios de negocio, un gateway que es la única puerta de entrada a
+la API, un MySQL con una base de datos por servicio y Keycloak como servidor de
+autorización OAuth 2.0.
 
 ```
-                      Postman / curl
-                            │  Authorization: Bearer <token>
-                            ▼
-   ─────────────── único puerto publicado: 8080 (Compose) · 30080 (Kubernetes)
-                ┌───────────────────────────┐
-                │     api-gateway :8080     │  valida el JWT y los permisos
-                └──┬──────┬───────┬──────┬──┘
-     red interna   │      │       │      │   (no alcanzable desde afuera)
-        ┌──────────▼┐ ┌───▼──────┐ ┌▼──────────┐ ┌▼──────────┐
-        │ usuarios  │ │  carta   │ │ clientes  │ │  salon    │
-        │  :8081    │ │  :8082   │ │  :8083    │ │  :8084    │
-        │ emite JWT │ │          │ │           │ │           │
-        └─────┬─────┘ └────┬─────┘ └─────┬─────┘ └─────┬─────┘
-              │            │             │             │
-        ┌─────▼────────────▼─────────────▼─────────────▼─────┐
-        │                mysql :3306  (MySQL 8.4)            │
-        │  usuariosdb   cartadb   clientesdb   salondb       │
-        │  (usuario     (usuario  (usuario     (usuario      │
-        │   usuarios)    carta)    clientes)    salon)       │
-        └────────────────────────┬───────────────────────────┘
-                                 │
-                        volumen persistente
+                  Postman / curl
+                        ├──────────────────────────────────────┐
+    Bearer <token>      │               pide tokens OAuth 2.0  │
+                        ▼                                      ▼
+  8080 (Compose) · 30080 (Kubernetes)             30180 (Compose y Kubernetes)
+  ┌──────────────────────────────────────────┐      ┌──────────────────────┐
+  │            api-gateway :8080             │ JWKS │    keycloak :8080    │
+  │ cadena 1: /api/pagos/** → token Keycloak │◄─────│  realm restaurante   │
+  │ cadena 2: el resto → token de usuarios   │      │  (OAuth 2.0, RS256)  │
+  └──┬─────────┬─────────┬─────────┬────────┬┘      └───────────▲──────────┘
+     │         │         │         │        │                   │ JWKS
+┌────▼───┐┌────▼───┐┌────▼───┐┌────▼───┐┌───▼──────────┐        │
+│usuarios││ carta  ││clientes││ salon  ││ pagos :8085  │────────┘
+│ :8081  ││ :8082  ││ :8083  ││ :8084  ││ valida token │
+│ firma  ││        ││        ││        ││ y scopes     │
+│ RS256  ││        ││        ││        ││              │
+└────┬───┘└────┬───┘└────┬───┘└────┬───┘└──────┬───────┘
+     └─────────┴─────────┼─────────┴───────────┘
+┌────────────────────────▼──────────────────────────┐
+│             mysql :3306  (MySQL 8.4)              │
+│ usuariosdb  cartadb  clientesdb  salondb  pagosdb │
+│           un usuario de MySQL por base            │
+└────────────────────────┬──────────────────────────┘
+                         │
+                volumen persistente
 ```
+
+**Dos emisores de token, dos claves públicas.** El sistema acepta dos tipos de
+token y cada ruta confía en uno solo:
+
+| Token | Lo emite | Firma con | Lo verifica | Sirve para |
+|---|---|---|---|---|
+| Token de sesión | `usuarios-service` (`POST /api/auth/login`) | La clave privada `claves/privada.pem` | El gateway, con `claves/publica.pem` | Todo menos `/api/pagos/**` |
+| *Access token* OAuth 2.0 | Keycloak (realm `restaurante`) | La clave privada interna de Keycloak | El gateway **y** `pagos-service`, con el JWKS de Keycloak | Solo `/api/pagos/**` |
 
 ### Módulos
 
 | Módulo | Puerto | Base de datos | Dominio | Imagen |
 |---|---|---|---|---|
-| `api-gateway` | 8080 | — | Enruta las peticiones hacia los cuatro servicios y valida el token | `restaurante/api-gateway:1.0` |
-| `usuarios-service` | 8081 | `usuariosdb` | Usuario, roles y autenticación | `restaurante/usuarios-service:1.0` |
+| `api-gateway` | 8080 | — | Enruta las peticiones hacia los cinco servicios y valida el token | `restaurante/api-gateway:1.0` |
+| `usuarios-service` | 8081 | `usuariosdb` | Usuario, roles y autenticación; emite el token de sesión | `restaurante/usuarios-service:1.0` |
 | `carta-service` | 8082 | `cartadb` | Platillo | `restaurante/carta-service:1.0` |
 | `clientes-service` | 8083 | `clientesdb` | Cliente, Reserva | `restaurante/clientes-service:1.0` |
 | `salon-service` | 8084 | `salondb` | Mesa, Pedido, Factura | `restaurante/salon-service:1.0` |
+| `pagos-service` | 8085 | `pagosdb` | Pago de una factura; valida por su cuenta el token de Keycloak | `restaurante/pagos-service:1.0` |
+| `keycloak` | 8080 interno, publicado en **30180** | — (modo de desarrollo) | Servidor OAuth 2.0: realm, clientes, scopes y usuario de demostración | `quay.io/keycloak/keycloak:26.4.0` (oficial) |
 
-La etiqueta de las imágenes es `1.0`, nunca `latest`: con `latest`, Kubernetes
-intenta descargar la imagen de Internet aunque ya esté construida en el equipo.
+**Keycloak no tiene Dockerfile** porque no es un microservicio propio: es una
+herramienta que se usa con su imagen oficial, igual que MySQL. Su configuración
+completa vive en `keycloak/restaurante-realm.json`, que se importa al arrancar.
+
+La etiqueta de nuestras imágenes es `1.0`, nunca `latest`: con `latest`,
+Kubernetes intenta descargar la imagen de Internet aunque ya esté construida en
+el equipo.
 
 ### Rutas
 
 El cliente HTTP solo necesita conocer la dirección del gateway: él reenvía cada
-ruta al servicio que le corresponde.
+ruta al servicio que le corresponde. Los tokens de Keycloak se piden directamente
+a Keycloak, en el puerto 30180.
 
 | Prefijo de ruta | Servicio |
 |---|---|
@@ -69,6 +90,33 @@ ruta al servicio que le corresponde.
 | `/api/platillos/**` | `carta-service` |
 | `/api/clientes/**`, `/api/reservas/**` | `clientes-service` |
 | `/api/mesas/**`, `/api/pedidos/**`, `/api/facturas/**` | `salon-service` |
+| `/api/pagos/**` | `pagos-service` |
+
+### Endpoints de `pagos-service`
+
+| Verbo | Ruta | Scope necesario | Qué hace | Éxito | Errores |
+|---|---|---|---|---|---|
+| POST | `/api/pagos` | `pagos:escribir` | Registra un pago en estado `PENDIENTE` | 201 | 400 · 409 si la factura ya tiene un pago `APROBADO` |
+| GET | `/api/pagos` | `pagos:leer` | Lista los pagos; filtros `?estado=` y `?facturaId=` | 200 | — |
+| GET | `/api/pagos/{id}` | `pagos:leer` | Consulta un pago | 200 | 404 |
+| PUT | `/api/pagos/{id}/estado` | `pagos:escribir` | Cambia el estado a `APROBADO` o `RECHAZADO` | 200 | 400 · 404 · 409 si la transición no está permitida |
+| DELETE | `/api/pagos/{id}` | `pagos:escribir` | Elimina un pago que no esté `APROBADO` | 204 | 404 · 409 si está aprobado |
+
+Cuerpo para registrar un pago:
+
+```json
+{ "facturaId": 1, "monto": 58000.00, "metodo": "TARJETA" }
+```
+
+Reglas de negocio:
+
+- Un pago nuevo siempre empieza en `PENDIENTE`, y solo puede pasar de ahí a
+  `APROBADO` o `RECHAZADO`.
+- El servidor genera la `referencia` (un UUID) y toma `registradoPor` del token
+  (`preferred_username` o, si no está, `azp`), nunca del cuerpo de la petición.
+- Una factura no puede tener dos pagos `APROBADO`, y un pago aprobado no se elimina.
+- `pagos-service` no consulta a `salon-service` para comprobar que la factura
+  existe: los servicios no se llaman entre sí, y esa es una limitación conocida.
 
 ### Estructura de un servicio
 
