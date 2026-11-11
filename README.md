@@ -632,25 +632,44 @@ Aunque alguien lo alcanzara por la red interna, sin un token válido no responde
 ## 4. Variables de entorno
 
 Las usan los Dockerfiles, el Compose y los manifiestos de Kubernetes. Se escriben
-exactamente así. **Este repositorio no contiene ningún valor real:** las claves se
-declaran en `.env.example` con valores de mentira, y cada quien pone los suyos en
-su copia `.env`, que está en el `.gitignore`.
+exactamente así. **Este repositorio no contiene ningún valor real:** los secretos
+se declaran en `.env.example` con valores de mentira, y cada quien pone los suyos
+en su copia `.env`, que está en el `.gitignore`. En Kubernetes, ese mismo `.env`
+se convierte en el Secret `restaurante-secretos`.
+
+### Secretos (archivo `.env`)
 
 | Variable | Quién la usa | Propósito |
 |---|---|---|
-| `SPRING_PROFILES_ACTIVE` | Los 5 módulos | Selecciona el perfil de configuración; en contenedores activa el que usa MySQL en lugar de H2 |
-| `TZ` | Los 5 módulos | Zona horaria del contenedor. Sin ella se usa UTC y una reserva para hoy puede rechazarse como fecha pasada |
-| `JAVA_TOOL_OPTIONS` | Los 5 módulos | Opciones de la JVM, para que respete el límite de memoria del contenedor |
-| `DB_URL` | Los 4 servicios | Cadena de conexión JDBC a la base de datos del servicio |
-| `DB_USER` | Los 4 servicios | Usuario de MySQL propio del servicio |
-| `DB_PASSWORD` | Los 4 servicios | Contraseña de ese usuario de MySQL |
-| `MYSQL_ROOT_PASSWORD` | `mysql` | Contraseña del superusuario, necesaria para crear las cuatro bases al arrancar |
-| `USUARIOS_DB_PASSWORD`, `CARTA_DB_PASSWORD`, `CLIENTES_DB_PASSWORD`, `SALON_DB_PASSWORD` | `mysql` y el servicio correspondiente | Contraseña de cada usuario de base de datos, la misma en el contenedor de MySQL y en su servicio |
-| `JWT_SECRET` | `usuarios-service` y `api-gateway` | Clave compartida con la que se firma y se valida el token. Mínimo 32 caracteres |
+| `MYSQL_ROOT_PASSWORD` | `mysql` | Contraseña del superusuario, necesaria para crear las cinco bases al arrancar |
+| `USUARIOS_DB_PASSWORD`, `CARTA_DB_PASSWORD`, `CLIENTES_DB_PASSWORD`, `SALON_DB_PASSWORD`, `PAGOS_DB_PASSWORD` | `mysql` y el servicio correspondiente | Contraseña de cada usuario de base de datos, la misma en el contenedor de MySQL y en su servicio |
+| `KEYCLOAK_ADMIN_PASSWORD` | `keycloak` | Contraseña del administrador inicial de la consola de Keycloak |
+| `PAGOS_CLIENTE_SECRET` | `keycloak` | Secreto del cliente `pagos-cliente`; el realm lo lee al importarse |
+| `PAGOS_CONSULTA_SECRET` | `keycloak` | Secreto del cliente `pagos-consulta`; el realm lo lee al importarse |
 
-En el perfil de contenedores ninguna de estas variables tiene valor por omisión:
-si falta una, el servicio **no arranca**, en lugar de arrancar silenciosamente
-contra una base vacía.
+### Configuración de los contenedores
+
+| Variable | Quién la usa | Propósito |
+|---|---|---|
+| `SPRING_PROFILES_ACTIVE` | Los 6 módulos | Selecciona el perfil de configuración; en contenedores activa el que usa MySQL en lugar de H2 |
+| `TZ` | Los 6 módulos, MySQL y Keycloak | Zona horaria del contenedor. Sin ella se usa UTC y una reserva para hoy puede rechazarse como fecha pasada |
+| `JAVA_TOOL_OPTIONS` | Los 6 módulos | Opciones de la JVM, para que respete el límite de memoria del contenedor |
+| `DB_URL` | Los 5 servicios | Cadena de conexión JDBC a la base de datos del servicio |
+| `DB_USER` | Los 5 servicios | Usuario de MySQL propio del servicio |
+| `DB_PASSWORD` | Los 5 servicios | Contraseña de ese usuario de MySQL, tomada del `.env` |
+| `JWT_CLAVE_PRIVADA` | `usuarios-service` | Ubicación del archivo de la clave privada con la que firma el token |
+| `JWT_CLAVE_PUBLICA` | `usuarios-service` y `api-gateway` | Ubicación del archivo de la clave pública con la que se verifica el token |
+| `OAUTH_ISSUER_URI` | `api-gateway` y `pagos-service` | Emisor que deben tener los tokens de Keycloak: su dirección pública |
+| `OAUTH_JWKS_URI` | `api-gateway` y `pagos-service` | Dirección interna desde la que descargan las claves públicas de Keycloak |
+| `KC_BOOTSTRAP_ADMIN_USERNAME` | `keycloak` | Usuario del administrador inicial de la consola |
+| `KC_BOOTSTRAP_ADMIN_PASSWORD` | `keycloak` | Contraseña de ese administrador, tomada de `KEYCLOAK_ADMIN_PASSWORD` |
+| `KC_HOSTNAME` | `keycloak` | Dirección pública fija, para que el emisor de los tokens sea siempre el mismo |
+| `KC_HOSTNAME_BACKCHANNEL_DYNAMIC` | `keycloak` | Permite que los servicios internos lo llamen por la dirección interna sin cambiar el emisor |
+| `KC_HEALTH_ENABLED` | `keycloak` | Activa los *endpoints* de salud de Keycloak |
+
+En el perfil de contenedores ninguna de las variables de los módulos tiene valor
+por omisión: si falta una, el servicio **no arranca**, en lugar de arrancar
+silenciosamente contra una base vacía o sin claves.
 
 ---
 
@@ -658,17 +677,26 @@ contra una base vacía.
 
 | Decisión | Por qué |
 |---|---|
-| **MySQL 8** en los cuatro servicios | El dominio es transaccional: emitir una factura cambia Pedido, Mesa y Factura en una sola transacción, y una base relacional lo garantiza con el código JPA que ya existe |
-| **Un contenedor de MySQL con cuatro bases de datos y un usuario por base** | Cada servicio solo ve su propia base, y en un portátil corre un solo MySQL en lugar de cuatro |
+| **MySQL 8** en los cinco servicios | El dominio es transaccional: emitir una factura cambia Pedido, Mesa y Factura en una sola transacción, y una base relacional lo garantiza con el código JPA que ya existe |
+| **Un contenedor de MySQL con cinco bases de datos y un usuario por base** | Cada servicio solo ve su propia base, y en un portátil corre un solo MySQL en lugar de cinco |
 | **Dos perfiles de Spring**: H2 en memoria y MySQL | En el entorno local y en las pruebas todo funciona sin Docker; en contenedores, si falta una variable el servicio no arranca |
-| **JWT emitido por `usuarios-service` y validado en el `api-gateway`** | Un solo punto de control: los cuatro servicios de negocio no cambian ni repiten la validación |
+| **Token de sesión emitido por `usuarios-service` y validado en el `api-gateway`** | Un solo punto de control: los cuatro servicios originales no cambian ni repiten la validación |
 | **Permisos mínimos por rol** | Permite demostrar 200, 401 y 403 respetando lo que hace cada rol en el restaurante, sin multiplicar las reglas |
 | **Un Dockerfile multietapa por módulo** | Cualquiera clona el repositorio y construye las imágenes sin compilar nada a mano; la imagen final solo lleva el JRE y el `.jar` |
 | **Imágenes etiquetadas `1.0` y `imagePullPolicy: Never`** | Kubernetes usa la imagen construida en el equipo y no intenta descargarla de un registro |
 | **Kubernetes de Docker Desktop** | No hay que instalar nada adicional y las imágenes locales se pueden usar tal cual |
 | **Sin llamadas entre servicios** | Cada servicio es autónomo y dueño de sus datos; una llamada entre servicios añadiría un acoplamiento que el alcance actual no necesita |
 | **BCrypt en lugar de un resumen sin sal** | BCrypt genera una sal distinta por contraseña y es lento a propósito, lo que hace inviables los ataques de diccionario |
-| **Secret y ConfigMap creados por comando** | Las contraseñas quedan fuera de los archivos versionados: se generan desde el `.env` local |
+| **Secrets y ConfigMaps creados por comando** | Las contraseñas y las claves quedan fuera de los archivos versionados: se generan desde el `.env` y la carpeta `claves/` locales |
+| **Un servicio nuevo de pagos** | Encaja en el dominio, porque la factura ya tiene un método de pago, y es el lugar natural para los scopes de OAuth. Un inventario, por ejemplo, no se relacionaba con lo existente ni aportaba a la seguridad |
+| **Token de sesión firmado con RS256** | Solo `usuarios-service` puede firmar, y la clave pública se reparte sin riesgo. Los claims no cambiaron, así que la matriz de permisos y las colecciones siguieron igual |
+| **Keycloak solo para pagos (modelo híbrido)** | Es un servidor de autorización real, configurable sin escribir código, que emite JWT firmados con RSA. Llevar todo el sistema a Keycloak habría roto el login, la matriz y las colecciones existentes, y un servidor de autorización propio exigía mucho más código |
+| **Dos cadenas de seguridad en el gateway** | Cada ruta confía en un solo emisor: es fácil de explicar y de probar, porque el token equivocado da 401. Un resolvedor de varios emisores en una sola cadena es más difícil de seguir |
+| **`pagos-service` también valida el token** | Defensa en profundidad donde está el dinero. Los cuatro servicios originales siguen sin validar, porque hacerlo rompía sus pruebas y no hacía falta para el alcance del proyecto |
+| **Keycloak en modo `start-dev`, con el realm importado de un archivo** | Cada arranque deja exactamente el mismo realm y no hay otra base de datos que mantener. Conectarlo a MySQL pedía más configuración y memoria sin beneficio para este proyecto |
+| **Un solo emisor en todos los entornos: el puerto 30180** | El `iss` del token depende de la dirección pública de Keycloak. Si cambiara entre Compose y Kubernetes, los tokens fallarían con 401 |
+| **Las claves RSA nunca entran al repositorio** | Una clave privada publicada invalida toda la seguridad. Cada quien genera su par en un segundo con el script; Compose lo monta como volumen de solo lectura y Kubernetes como Secret, así que la misma imagen sirve con claves distintas |
+| **Dos flujos OAuth: `client_credentials` y _Authorization Code_ con PKCE** | El primero se automatiza en Postman; el segundo muestra OAuth con un usuario real, que es su caso de uso principal. Los flujos *password* e *implicit* están desaconsejados por inseguros |
 
 ---
 
