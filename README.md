@@ -702,37 +702,75 @@ silenciosamente contra una base vacía o sin claves.
 
 ## 6. Colecciones de Postman
 
-En `docs/postman/` hay una colección por servicio, más la de autenticación:
+En `docs/postman/` hay una colección por servicio, más las de autenticación:
 
 ```
 docs/postman/
 ├── 00-autenticacion.postman_collection.json
+├── 01-oauth2.postman_collection.json
+├── pagos.postman_collection.json
 ├── usuarios.postman_collection.json
 ├── carta.postman_collection.json
 ├── clientes.postman_collection.json
 └── salon.postman_collection.json
 ```
 
-**1. Importarlas.** En Postman, *Import* y seleccionar los cinco archivos.
+**1. Importarlas.** En Postman, *Import* y seleccionar los siete archivos.
 
-**2. Crear un environment llamado «Restaurante»** con una variable:
+**2. Crear un environment llamado «Restaurante»** con estas variables:
 
 | Variable | Valor |
 |---|---|
 | `base` | `http://localhost:8080` con Docker Compose o en local, `http://localhost:30080` con Kubernetes |
+| `keycloak` | `http://localhost:30180`, en los tres modos |
+| `pagosClienteSecret` | El valor de `PAGOS_CLIENTE_SECRET` de tu `.env` |
+| `pagosConsultaSecret` | El valor de `PAGOS_CONSULTA_SECRET` de tu `.env` |
 
-Todas las peticiones usan `{{base}}`, así que cambiar ese único valor basta para
-pasar de un modo de ejecución a otro. Hay que seleccionar el environment
-«Restaurante» en la esquina superior derecha antes de enviar nada.
+**Los dos secretos van solo en tu environment local**, nunca en las colecciones
+ni en el repositorio. Las colecciones los leen como `{{pagosClienteSecret}}` y
+`{{pagosConsultaSecret}}` y no traen ningún valor.
 
-**3. Correr primero `00-autenticacion`.** Esa colección inicia sesión con los
-cuatro usuarios de demostración y guarda los tokens en las variables `token`,
-`tokenAdministrador`, `tokenMesero`, `tokenCocinero` y `tokenCajero`. Las demás
-colecciones los leen de ahí: si se ejecutan antes, todas responden **401**.
+Todas las peticiones a la API usan `{{base}}`, así que cambiar ese único valor
+basta para pasar de un modo de ejecución a otro. Hay que seleccionar el
+environment «Restaurante» en la esquina superior derecha antes de enviar nada.
 
-Con los tokens ya guardados, cada colección se puede correr completa con el
-*Collection Runner*. Las peticiones llevan sus propias pruebas, e incluyen los
-casos de **401** y **403** que demuestran la matriz de permisos.
+**3. Correrlas en este orden:**
+
+1. **`00-autenticacion`**: inicia sesión con los cuatro usuarios de demostración
+   y guarda los tokens de `usuarios-service` en `token`, `tokenAdministrador`,
+   `tokenMesero`, `tokenCocinero` y `tokenCajero`.
+2. **`01-oauth2`**: pide a Keycloak los tokens de `pagos-cliente` y
+   `pagos-consulta` por `client_credentials` y los guarda en `tokenPagos` y
+   `tokenPagosConsulta`. Incluye la consulta de la configuración OpenID del realm
+   y un caso con secreto incorrecto.
+3. **`pagos`**: el CRUD de pagos con `{{tokenPagos}}`, los errores 400 y 409, y
+   las pruebas de seguridad: sin token (401), con el token de `pagos-consulta`
+   (403) y con el token del login (401).
+4. **`usuarios`, `carta`, `clientes` y `salon`**, en cualquier orden.
+
+Si una colección se ejecuta antes de la que guarda sus tokens, sus peticiones
+responden **401**. Con los tokens ya guardados, cada colección se puede correr
+completa con el *Collection Runner*. Las peticiones llevan sus propias pruebas,
+e incluyen los casos de **401** y **403** que demuestran la matriz de permisos.
+
+**4. *Authorization Code* con PKCE (manual, para la demostración).** En una
+petición de pagos, pestaña **Authorization**:
+
+| Campo | Valor |
+|---|---|
+| Type | OAuth 2.0 |
+| Grant type | Authorization Code (With PKCE) |
+| Callback URL | `https://oauth.pstmn.io/v1/callback`, con *Authorize using browser* marcado |
+| Auth URL | `{{keycloak}}/realms/restaurante/protocol/openid-connect/auth` |
+| Access Token URL | `{{keycloak}}/realms/restaurante/protocol/openid-connect/token` |
+| Client ID | `restaurante-postman` |
+| Code Challenge Method | SHA-256 |
+| Scope | `openid pagos:escribir` |
+
+*Get New Access Token* abre el navegador en la página de Keycloak; se inicia
+sesión con `cajero@restaurante.com` y se elige *Use Token*. Si se quita
+`pagos:escribir` del campo Scope, el token solo trae `pagos:leer` y un `POST`
+responde **403**.
 
 ---
 
@@ -760,8 +798,33 @@ Docker, Inc. (s. f.). *Docker Compose*. https://docs.docker.com/compose/
 
 Docker, Inc. (s. f.). *Docker documentation*. https://docs.docker.com/
 
+Hardt, D. (Ed.). (2012). *The OAuth 2.0 authorization framework* (RFC 6749).
+Internet Engineering Task Force. https://doi.org/10.17487/RFC6749
+
+Jones, M. (2015a). *JSON Web Algorithms (JWA)* (RFC 7518). Internet Engineering
+Task Force. https://doi.org/10.17487/RFC7518
+
+Jones, M. (2015b). *JSON Web Key (JWK)* (RFC 7517). Internet Engineering Task
+Force. https://doi.org/10.17487/RFC7517
+
 Jones, M., Bradley, J., & Sakimura, N. (2015). *JSON Web Token (JWT)* (RFC 7519).
-RFC Editor. https://www.rfc-editor.org/rfc/rfc7519
+Internet Engineering Task Force. https://doi.org/10.17487/RFC7519
+
+Keycloak. (s. f.-a). *Configuring the hostname (v2)*.
+https://www.keycloak.org/server/hostname
+
+Keycloak. (s. f.-b). *Importing and exporting realms*.
+https://www.keycloak.org/server/importExport
+
+Keycloak. (s. f.-c). *Server administration guide*.
+https://www.keycloak.org/docs/latest/server_admin/
+
+Lodderstedt, T., Bradley, J., Labunets, A., & Fett, D. (2025). *Best current
+practice for OAuth 2.0 security* (RFC 9700). Internet Engineering Task Force.
+https://doi.org/10.17487/RFC9700
+
+Okta. (s. f.). *Introduction to JSON Web Tokens*. JWT.io.
+https://www.jwt.io/introduction
 
 Oracle Corporation. (s. f.). *MySQL 8.4 reference manual*.
 https://dev.mysql.com/doc/refman/8.4/en/
@@ -769,8 +832,18 @@ https://dev.mysql.com/doc/refman/8.4/en/
 OWASP Foundation. (s. f.). *Password storage cheat sheet*. OWASP Cheat Sheet
 Series. https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
 
-The Kubernetes Authors. (s. f.). *Kubernetes documentation*.
+Sakimura, N., Bradley, J., & Agarwal, N. (2015). *Proof Key for Code Exchange by
+OAuth public clients* (RFC 7636). Internet Engineering Task Force.
+https://doi.org/10.17487/RFC7636
+
+Spring. (s. f.). *OAuth 2.0 resource server JWT*. Spring Security Reference.
+https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html
+
+The Kubernetes Authors. (s. f.-a). *Kubernetes documentation*.
 https://kubernetes.io/docs/home/
 
-Las direcciones electrónicas se consultaron el 12 de octubre de 2026. El material
-de clase es de distribución interna y no tiene dirección pública.
+The Kubernetes Authors. (s. f.-b). *Secrets*. Kubernetes Documentation.
+https://kubernetes.io/docs/concepts/configuration/secret/
+
+Las direcciones electrónicas se consultaron el 10 de noviembre de 2026. El
+material de clase es de distribución interna y no tiene dirección pública.
