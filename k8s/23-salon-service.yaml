@@ -16,8 +16,8 @@ spec:
       enableServiceLinks: false
       containers:
         - name: salon-service
-          image: restaurante/salon-service:1.0
-          imagePullPolicy: Never
+          image: ghcr.io/rosa-sdev/salon-service:main
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8084
           env:
