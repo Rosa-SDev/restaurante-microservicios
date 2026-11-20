@@ -8,6 +8,7 @@ propio puerto y su propia base de datos. La autorización de los pagos la resuel
 
 - [1. El sistema y su arquitectura](#1-el-sistema-y-su-arquitectura)
 - [2. Cómo ejecutarlo desde un clon limpio](#2-cómo-ejecutarlo-desde-un-clon-limpio)
+  - [2.6 CI/CD con GitHub Actions](#26-cicd-con-github-actions)
 - [3. Seguridad](#3-seguridad)
 - [4. Variables de entorno](#4-variables-de-entorno)
 - [5. Decisiones técnicas](#5-decisiones-técnicas)
@@ -60,23 +61,25 @@ token y cada ruta confía en uno solo:
 
 ### Módulos
 
-| Módulo | Puerto | Base de datos | Dominio | Imagen |
+| Módulo | Puerto | Base de datos | Dominio | Imagen (Compose · Kubernetes) |
 |---|---|---|---|---|
-| `api-gateway` | 8080 | — | Enruta las peticiones hacia los cinco servicios y valida el token | `restaurante/api-gateway:1.0` |
-| `usuarios-service` | 8081 | `usuariosdb` | Usuario, roles y autenticación; emite el token de sesión | `restaurante/usuarios-service:1.0` |
-| `carta-service` | 8082 | `cartadb` | Platillo | `restaurante/carta-service:1.0` |
-| `clientes-service` | 8083 | `clientesdb` | Cliente, Reserva | `restaurante/clientes-service:1.0` |
-| `salon-service` | 8084 | `salondb` | Mesa, Pedido, Factura | `restaurante/salon-service:1.0` |
-| `pagos-service` | 8085 | `pagosdb` | Pago de una factura; valida por su cuenta el token de Keycloak | `restaurante/pagos-service:1.0` |
+| `api-gateway` | 8080 | — | Enruta las peticiones hacia los cinco servicios y valida el token | `restaurante/api-gateway:1.0` · `ghcr.io/rosa-sdev/api-gateway` |
+| `usuarios-service` | 8081 | `usuariosdb` | Usuario, roles y autenticación; emite el token de sesión | `restaurante/usuarios-service:1.0` · `ghcr.io/rosa-sdev/usuarios-service` |
+| `carta-service` | 8082 | `cartadb` | Platillo | `restaurante/carta-service:1.0` · `ghcr.io/rosa-sdev/carta-service` |
+| `clientes-service` | 8083 | `clientesdb` | Cliente, Reserva | `restaurante/clientes-service:1.0` · `ghcr.io/rosa-sdev/clientes-service` |
+| `salon-service` | 8084 | `salondb` | Mesa, Pedido, Factura | `restaurante/salon-service:1.0` · `ghcr.io/rosa-sdev/salon-service` |
+| `pagos-service` | 8085 | `pagosdb` | Pago de una factura; valida por su cuenta el token de Keycloak | `restaurante/pagos-service:1.0` · `ghcr.io/rosa-sdev/pagos-service` |
 | `keycloak` | 8080 interno, publicado en **30180** | — (modo de desarrollo) | Servidor OAuth 2.0: realm, clientes, scopes y usuario de demostración | `quay.io/keycloak/keycloak:26.4.0` (oficial) |
 
 **Keycloak no tiene Dockerfile** porque no es un microservicio propio: es una
 herramienta que se usa con su imagen oficial, igual que MySQL. Su configuración
 completa vive en `keycloak/restaurante-realm.json`, que se importa al arrancar.
 
-La etiqueta de nuestras imágenes es `1.0`, nunca `latest`: con `latest`,
-Kubernetes intenta descargar la imagen de Internet aunque ya esté construida en
-el equipo.
+Docker Compose construye nuestras imágenes en el equipo con la etiqueta `1.0`.
+Kubernetes usa las que publica el pipeline en GitHub Container Registry (GHCR):
+los manifiestos apuntan a `:main` y cada despliegue fija la imagen con el SHA del
+commit (sección 2.6). Ninguna usa `latest`, porque esa etiqueta no dice qué
+versión del código corre ni cuándo cambió.
 
 ### Rutas
 
@@ -149,7 +152,9 @@ través del gateway, y Keycloak responde en el mismo puerto 30180.
 | Docker Compose | MySQL en contenedor | `http://localhost:8080` | `http://localhost:30180` |
 | Kubernetes | MySQL con volumen persistente | `http://localhost:30080` | `http://localhost:30180` |
 
-Los tres modos necesitan antes las claves RSA y el archivo `.env`.
+Los tres modos necesitan antes las claves RSA y el archivo `.env`. En Kubernetes,
+además, el pipeline de la sección 2.6 despliega solo cada cambio que llega a
+`main`.
 
 ### 2.1 Generar las claves RSA (una sola vez)
 
@@ -298,14 +303,13 @@ Requisitos: Docker Desktop con Kubernetes activado (*Settings → Kubernetes →
 Enable Kubernetes*), y las claves y el `.env` ya creados como en los pasos 2.1
 y 2.2.
 
-**Paso 1: construir las seis imágenes en el equipo.** Los manifiestos usan
-`imagePullPolicy: Never`, es decir, Kubernetes no intenta descargar nada de
-Internet y solo usa las imágenes locales. Si no existen, los Pods se quedan en
-`ErrImageNeverPull`. La imagen de Keycloak sí se descarga, porque es la oficial.
-
-```bash
-docker compose build
-```
+**Paso 1: tener las imágenes publicadas en GHCR.** Los manifiestos usan
+`ghcr.io/rosa-sdev/<servicio>:main` con `imagePullPolicy: IfNotPresent`:
+Kubernetes descarga cada imagen del registro la primera vez y después reutiliza
+la copia del equipo. Las publica el pipeline de la sección 2.6, así que antes
+del primer despliegue debe haber corrido al menos una vez y los seis paquetes
+deben ser públicos (ver *Primer despliegue* en la sección 2.6). La imagen de
+Keycloak es la oficial y también se descarga.
 
 **Paso 2: crear el namespace, los dos Secrets y los dos ConfigMaps.** Ningún
 secreto está escrito en los manifiestos: todo se genera por comando a partir de
@@ -335,7 +339,12 @@ kubectl get pods -n restaurante -w
 
 Es normal que algunos servicios se reinicien una o dos veces al arrancar,
 mientras MySQL termina de levantarse: Kubernetes los recupera solo. El estado
-final es de **ocho Pods en `1/1 Running`**.
+final es de **ocho Pods en `1/1 Running`**. Si un servicio se queda en
+`ImagePullBackOff`, su paquete de GHCR todavía es privado.
+
+Este paso se hace una sola vez: después, el pipeline solo cambia la imagen de
+los seis servicios y no vuelve a aplicar los manifiestos. Si se modifica algún
+archivo de `k8s/`, hay que aplicarlo a mano con `kubectl apply -f k8s/`.
 
 Dos Services son de tipo NodePort, así que las direcciones base son:
 
@@ -359,6 +368,111 @@ kubectl delete namespace restaurante
 
 Si se cambia el `.env` o se regeneran las claves, hay que borrar el namespace y
 repetir desde el paso 2, porque los Secrets se crean a partir de esos archivos.
+
+### 2.6 CI/CD con GitHub Actions
+
+El workflow `.github/workflows/ci-cd.yml` (*CI/CD - Microservicios Kubernetes*)
+compila y prueba cada cambio, publica las seis imágenes en GHCR y actualiza el
+Kubernetes de Docker Desktop de este equipo a través de un runner self-hosted.
+Solo usa el `GITHUB_TOKEN` que GitHub genera en cada ejecución: no hay secretos
+propios.
+
+```
+push a main           ──► verify ──► build-push (seis imágenes en paralelo) ──► deploy-local
+PR a main o develop   ──► verify
+```
+
+| Job | Dónde corre | Cuándo | Qué hace |
+|---|---|---|---|
+| `verify` | `ubuntu-latest` | Push a `main`, PR hacia `main` o `develop`, y *Run workflow* | `./mvnw -B --no-transfer-progress clean verify` con Temurin 21 y caché de Maven. Las pruebas usan H2 y claves generadas en memoria, así que no necesitan MySQL ni la carpeta `claves/` |
+| `build-push` | `ubuntu-latest`, una ejecución por servicio | Si `verify` pasa y el evento no es un PR | Construye cada imagen con su Dockerfile, con la raíz como contexto, y la publica como `ghcr.io/rosa-sdev/<servicio>:<sha>`. Desde `main` añade también la etiqueta `:main` |
+| `deploy-local` | Runner self-hosted de este equipo | Si `build-push` pasa, solo en `main` y nunca en un PR | Comprueba el contexto `docker-desktop` y los Deployments y ejecuta `scripts/desplegar-k8s.ps1`. Al final muestra los Deployments y los Pods del namespace, aunque algo haya fallado |
+
+El script `scripts/desplegar-k8s.ps1` recibe el dueño de las imágenes y el SHA
+del commit (`IMAGE_OWNER` e `IMAGE_SHA`) y hace lo siguiente:
+
+1. Valida los dos valores, el contexto, el namespace, los dos Secrets, los dos
+   ConfigMaps y los ocho Deployments. Solo comprueba que existan: nunca los
+   crea ni lee sus valores.
+2. Espera a que MySQL y Keycloak estén listos.
+3. Actualiza los servicios en orden, `usuarios-service` primero y `api-gateway`
+   al final, con `kubectl set image` a la imagen del commit, y espera cada
+   rollout hasta 10 minutos, porque los servicios se reinician mientras MySQL
+   arranca. Si un servicio ya tiene esa imagen, solo verifica su rollout.
+4. Si algo falla, muestra el `describe`, los Pods, sus logs actuales y previos y
+   los eventos `Warning`, y termina con error. No revierte nada: se corrige con
+   un commit nuevo o con `kubectl rollout undo`.
+
+El script no aplica manifiestos ni crea Secrets. También se puede ejecutar a
+mano desde PowerShell 7 con un SHA ya publicado:
+
+```powershell
+$env:IMAGE_OWNER = 'rosa-sdev'
+$env:IMAGE_SHA = (git rev-parse HEAD)
+./scripts/desplegar-k8s.ps1
+```
+
+#### Requisitos del runner
+
+- Windows x64 con Docker Desktop y Kubernetes activado, en el contexto
+  `docker-desktop`. `kubectl` viene con Docker Desktop.
+- **PowerShell 7** (`pwsh`), que no trae Windows de serie:
+
+  ```powershell
+  winget install Microsoft.PowerShell
+  ```
+
+- El runner registrado en el repositorio con la etiqueta `docker-desktop`. En
+  *Settings → Actions → Runners → New self-hosted runner* (Windows, x64), GitHub
+  muestra los comandos para descargarlo y el token de registro. Al configurarlo
+  se añade la etiqueta y luego se arranca con `run.cmd`:
+
+  ```powershell
+  .\config.cmd --url https://github.com/Rosa-SDev/restaurante-microservicios --token <token de registro> --labels docker-desktop
+  .\run.cmd
+  ```
+
+  Las etiquetas `self-hosted`, `Windows` y `X64` las pone el runner solo. El
+  runner únicamente toma trabajos mientras `run.cmd` está abierto.
+
+#### Primer despliegue (una sola vez)
+
+1. Hacer merge a `main`, o *Run workflow* sobre `main`. `verify` y
+   `build-push` publican las seis imágenes. Si los Deployments todavía no
+   existen en el clúster, `deploy-local` falla en esta primera ejecución, y es
+   lo esperado.
+2. Hacer públicos los seis paquetes, porque GHCR los crea privados y sin
+   credenciales Kubernetes no puede descargarlos. En GitHub, para
+   `usuarios-service`, `carta-service`, `clientes-service`, `salon-service`,
+   `pagos-service` y `api-gateway`: *Packages → paquete → Package settings →
+   Change visibility → Public*.
+3. Crear los Secrets y los ConfigMaps y aplicar los manifiestos (pasos 2 y 3 de
+   la sección 2.5). Los servicios arrancan con la imagen `:main`.
+4. Volver a ejecutar el workflow (*Re-run failed jobs*, o *Run workflow* sobre
+   `main`). Desde aquí, cada despliegue es automático.
+
+#### Cómo dispararlo
+
+- **Merge de un PR a `main`**, o cualquier push a `main`: corren los tres jobs.
+- ***Actions → CI/CD - Microservicios Kubernetes → Run workflow***: sobre
+  `main` corren los tres jobs. Sobre otra rama corren `verify` y `build-push`,
+  que publica solo la etiqueta del SHA, sin `:main` y sin desplegar.
+- **Un PR hacia `main` o `develop`** solo ejecuta `verify`.
+
+Para comprobar el resultado en el equipo:
+
+```powershell
+kubectl get deployments,pods -n restaurante -o wide
+```
+
+#### Errores conocidos
+
+| Error | Dónde | Causa | Solución |
+|---|---|---|---|
+| `denied: permission_denied: write_package` | `build-push` | El paquete ya existía sin estar vinculado al repositorio, o el repositorio no tiene permiso de escritura sobre él | En el paquete: *Package settings → Manage Actions access → Add repository*, con el rol *Write*. El workflow añade la etiqueta `org.opencontainers.image.source` para que los paquetes nuevos queden vinculados al repositorio |
+| Runner `Offline`, o el job se queda en *Waiting for a runner* | `deploy-local` | `run.cmd` no está abierto, el equipo está apagado o el runner no tiene la etiqueta `docker-desktop` | Abrir `run.cmd` en la carpeta del runner y revisar sus etiquetas en *Settings → Actions → Runners* |
+| `ImagePullBackOff` | Pods de los servicios | El paquete de GHCR sigue privado y Kubernetes no tiene credenciales para descargarlo | Hacerlo público (paso 2 del primer despliegue). El Pod se recupera solo en el siguiente reintento |
+| `ErrImageNeverPull` | Pods de los servicios | El clúster conserva Deployments antiguos con `imagePullPolicy: Never`, así que no descarga la imagen nueva de GHCR | Volver a aplicar los manifiestos con `kubectl apply -f k8s/` y relanzar el workflow |
 
 ---
 
@@ -683,8 +797,8 @@ silenciosamente contra una base vacía o sin claves.
 | **Token de sesión emitido por `usuarios-service` y validado en el `api-gateway`** | Un solo punto de control: los cuatro servicios originales no cambian ni repiten la validación |
 | **Permisos mínimos por rol** | Permite demostrar 200, 401 y 403 respetando lo que hace cada rol en el restaurante, sin multiplicar las reglas |
 | **Un Dockerfile multietapa por módulo** | Cualquiera clona el repositorio y construye las imágenes sin compilar nada a mano; la imagen final solo lleva el JRE y el `.jar` |
-| **Imágenes etiquetadas `1.0` y `imagePullPolicy: Never`** | Kubernetes usa la imagen construida en el equipo y no intenta descargarla de un registro |
-| **Kubernetes de Docker Desktop** | No hay que instalar nada adicional y las imágenes locales se pueden usar tal cual |
+| **Imágenes en GHCR etiquetadas con el SHA del commit, con `imagePullPolicy: IfNotPresent`** | Cada despliegue apunta a una imagen que no cambia y que se rastrea hasta su commit; `:main` sirve para el primer `kubectl apply`. Con `IfNotPresent`, Kubernetes descarga cada imagen una sola vez. Compose sigue construyendo `restaurante/<servicio>:1.0` en el equipo |
+| **Kubernetes de Docker Desktop** | No hay que instalar nada adicional, y el mismo equipo que lo ejecuta hace de runner del pipeline |
 | **Sin llamadas entre servicios** | Cada servicio es autónomo y dueño de sus datos; una llamada entre servicios añadiría un acoplamiento que el alcance actual no necesita |
 | **BCrypt en lugar de un resumen sin sal** | BCrypt genera una sal distinta por contraseña y es lento a propósito, lo que hace inviables los ataques de diccionario |
 | **Secrets y ConfigMaps creados por comando** | Las contraseñas y las claves quedan fuera de los archivos versionados: se generan desde el `.env` y la carpeta `claves/` locales |
@@ -697,6 +811,11 @@ silenciosamente contra una base vacía o sin claves.
 | **Un solo emisor en todos los entornos: el puerto 30180** | El `iss` del token depende de la dirección pública de Keycloak. Si cambiara entre Compose y Kubernetes, los tokens fallarían con 401 |
 | **Las claves RSA nunca entran al repositorio** | Una clave privada publicada invalida toda la seguridad. Cada quien genera su par en un segundo con el script; Compose lo monta como volumen de solo lectura y Kubernetes como Secret, así que la misma imagen sirve con claves distintas |
 | **Dos flujos OAuth: `client_credentials` y _Authorization Code_ con PKCE** | El primero se automatiza en Postman; el segundo muestra OAuth con un usuario real, que es su caso de uso principal. Los flujos *password* e *implicit* están desaconsejados por inseguros |
+| **Runner self-hosted en el portátil** | Los runners de GitHub no alcanzan un clúster local. El runner es el que se conecta a GitHub por HTTPS, así que no hay que abrir puertos ni exponer el clúster |
+| **Despliegue con `kubectl set image`, sin aplicar manifiestos** | El pipeline solo cambia la versión de la imagen. Los manifiestos, los Secrets y los ConfigMaps se aplican a mano, así que el pipeline no necesita el `.env` ni las claves |
+| **Paquetes públicos en lugar de un Secret de descarga** | Las imágenes no contienen secretos, porque las claves y las contraseñas llegan al arrancar. Así no hay que crear ni renovar un `imagePullSecret` con un token personal |
+| **Sin reversión automática** | Un rollout fallido queda a la vista con su diagnóstico, mientras que revertir sin revisar puede esconder el error. Se corrige con un commit nuevo o con `kubectl rollout undo` |
+| **Una sola ejecución por rama a la vez** | Dos despliegues simultáneos sobre el mismo clúster se pisarían. En los PR, la ejecución nueva cancela la anterior |
 
 ---
 
@@ -798,6 +917,18 @@ Docker, Inc. (s. f.). *Docker Compose*. https://docs.docker.com/compose/
 
 Docker, Inc. (s. f.). *Docker documentation*. https://docs.docker.com/
 
+GitHub, Inc. (s. f.-a). *Adding self-hosted runners*. GitHub Docs.
+https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/add-runners
+
+GitHub, Inc. (s. f.-b). *Configuring a package's access control and visibility*.
+GitHub Docs. https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility
+
+GitHub, Inc. (s. f.-c). *Workflow syntax for GitHub Actions*. GitHub Docs.
+https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+
+GitHub, Inc. (s. f.-d). *Working with the Container registry*. GitHub Docs.
+https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry
+
 Hardt, D. (Ed.). (2012). *The OAuth 2.0 authorization framework* (RFC 6749).
 Internet Engineering Task Force. https://doi.org/10.17487/RFC6749
 
@@ -839,11 +970,17 @@ https://doi.org/10.17487/RFC7636
 Spring. (s. f.). *OAuth 2.0 resource server JWT*. Spring Security Reference.
 https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html
 
-The Kubernetes Authors. (s. f.-a). *Kubernetes documentation*.
+The Kubernetes Authors. (s. f.-a). *Images*. Kubernetes Documentation.
+https://kubernetes.io/docs/concepts/containers/images/
+
+The Kubernetes Authors. (s. f.-b). *kubectl rollout*. Kubernetes Documentation.
+https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/
+
+The Kubernetes Authors. (s. f.-c). *Kubernetes documentation*.
 https://kubernetes.io/docs/home/
 
-The Kubernetes Authors. (s. f.-b). *Secrets*. Kubernetes Documentation.
+The Kubernetes Authors. (s. f.-d). *Secrets*. Kubernetes Documentation.
 https://kubernetes.io/docs/concepts/configuration/secret/
 
-Las direcciones electrónicas se consultaron el 10 de noviembre de 2026. El
+Las direcciones electrónicas se consultaron entre el 10 y el 19 de noviembre de 2026. El
 material de clase es de distribución interna y no tiene dirección pública.
