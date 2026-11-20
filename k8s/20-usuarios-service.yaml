@@ -16,8 +16,8 @@ spec:
       enableServiceLinks: false
       containers:
         - name: usuarios-service
-          image: restaurante/usuarios-service:1.0
-          imagePullPolicy: Never
+          image: ghcr.io/rosa-sdev/usuarios-service:main
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8081
           env:
