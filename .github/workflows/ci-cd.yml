@@ -1,0 +1,147 @@
+name: CI/CD - Microservicios Kubernetes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+# Permisos mínimos por defecto; cada job amplía solo lo que necesita.
+permissions:
+  contents: read
+
+# Una ejecución por rama. En los PR se cancela la anterior; un despliegue
+# nunca se corta a la mitad.
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    name: Compilar y probar
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Instalar Java 21 (Temurin) con caché de Maven
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Compilar y ejecutar las pruebas
+        run: ./mvnw -B --no-transfer-progress clean verify
+
+  build-push:
+    name: Imagen ${{ matrix.servicio }}
+    needs: verify
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        servicio:
+          - usuarios-service
+          - carta-service
+          - clientes-service
+          - salon-service
+          - pagos-service
+          - api-gateway
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Calcular el nombre y las etiquetas de la imagen
+        id: imagen
+        env:
+          SERVICIO: ${{ matrix.servicio }}
+        run: |
+          # GHCR exige el dueño en minúsculas.
+          imagen="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/${SERVICIO}"
+          etiquetas="${imagen}:${GITHUB_SHA}"
+          # La etiqueta :main solo se publica desde la rama main.
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            etiquetas="${etiquetas},${imagen}:main"
+          fi
+          echo "etiquetas=${etiquetas}" >> "$GITHUB_OUTPUT"
+
+      - name: Preparar Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Iniciar sesión en GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construir y publicar la imagen
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./${{ matrix.servicio }}/Dockerfile
+          push: true
+          tags: ${{ steps.imagen.outputs.etiquetas }}
+          # Vincula el paquete con el repositorio para que GITHUB_TOKEN pueda escribir en él.
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.servicio }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.servicio }}
+
+  deploy-local:
+    name: Desplegar en Kubernetes (Docker Desktop)
+    needs: build-push
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: [self-hosted, Windows, X64, docker-desktop]
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Verificar el contexto y los Deployments
+        run: |
+          $contexto = kubectl config current-context
+          if ($LASTEXITCODE -ne 0 -or $contexto -ne 'docker-desktop') {
+            Write-Output "::error::El contexto de kubectl es '$contexto' y debe ser 'docker-desktop'."
+            exit 1
+          }
+          $deployments = @(
+            'usuarios-service', 'carta-service', 'clientes-service',
+            'salon-service', 'pagos-service', 'api-gateway'
+          )
+          $faltantes = @()
+          foreach ($deployment in $deployments) {
+            kubectl get deployment $deployment --namespace restaurante --context docker-desktop *> $null
+            if ($LASTEXITCODE -ne 0) { $faltantes += $deployment }
+          }
+          if ($faltantes.Count -gt 0) {
+            Write-Output "::error::Faltan Deployments en el namespace restaurante: $($faltantes -join ', '). Aplica antes los manifiestos de k8s/."
+            exit 1
+          }
+          Write-Output "Contexto docker-desktop y los seis Deployments presentes."
+
+      - name: Desplegar las imágenes del commit
+        env:
+          IMAGE_OWNER: ${{ github.repository_owner }}
+          IMAGE_SHA: ${{ github.sha }}
+        run: |
+          $env:IMAGE_OWNER = $env:IMAGE_OWNER.ToLowerInvariant()
+          ./scripts/desplegar-k8s.ps1
+
+      - name: Estado final del namespace
+        if: always()
+        run: kubectl get deployments,pods --namespace restaurante --context docker-desktop -o wide
