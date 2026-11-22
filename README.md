@@ -1,5 +1,7 @@
 # restaurante-microservicios
 
+[![CI/CD - Microservicios Kubernetes](https://github.com/Rosa-SDev/restaurante-microservicios/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/Rosa-SDev/restaurante-microservicios/actions/workflows/ci-cd.yml)
+
 Sistema de Gestión de Restaurante expuesto como microservicios REST con Spring Boot.
 El proyecto es un repositorio Maven multimódulo: un `pom.xml` padre que coordina
 seis aplicaciones Spring Boot independientes, cada una con su propio `main`, su
